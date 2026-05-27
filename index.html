@@ -1446,17 +1446,24 @@ function doSignOut() {
   supa.auth.signOut().then(function() { showLoginScreen(); });
 }
 
+// ── FETCH ALL AWARDS (paginated, bypasses Supabase 1000-row limit) ─────────
 function fetchAllAwards() {
-  var PAGE = 1000; var allRows = [];
+  var PAGE = 1000;
+  var allRows = [];
   function fetchPage(from) {
-    return supa.from('awards').select('*').range(from, from + PAGE - 1).then(function(r) {
-      if (r.error) return allRows;
-      allRows = allRows.concat(r.data || []);
-      if ((r.data || []).length === PAGE) return fetchPage(from + PAGE);
-      return allRows;
-    });
+    return supa.from('awards').select('*').range(from, from + PAGE - 1)
+      .then(function(r) {
+        if (r.error) return allRows;
+        allRows = allRows.concat(r.data || []);
+        if ((r.data || []).length === PAGE) {
+          return fetchPage(from + PAGE);  // more pages
+        }
+        return allRows;
+      });
   }
-  return fetchPage(0).then(function(rows) { return { data: rows, error: null }; });
+  return fetchPage(0).then(function(rows) {
+    return { data: rows, error: null };
+  });
 }
 
 // ── LOAD ALL DATA FROM SUPABASE ──────────────────────────────────────────
@@ -2950,6 +2957,21 @@ function clearSchedFilters(){
 
 
 // ── BUILD MATCH PLAYER LIST (shown when schedule card is tapped) ──────────
+function awardIcons(p) {
+  // Compact inline icons for game card rows — glanceable award indicators
+  var s = '';
+  if(p.ynt)          s += '<span title="US Youth National Team" style="font-size:12px;line-height:1;">🌟</span>';
+  if(p.all_american) s += '<span title="All-American" style="font-size:12px;line-height:1;">🏆</span>';
+  if(p.conf_poy)     s += '<span title="Player of the Year" style="font-size:12px;line-height:1;">🥇</span>';
+  if(p.conf_first)   s += '<span title="1st Team All-Conference" style="width:9px;height:9px;border-radius:50%;background:#1e40af;display:inline-block;vertical-align:middle;"></span>';
+  if(p.conf_second)  s += '<span title="2nd Team All-Conference" style="width:9px;height:9px;border-radius:50%;background:#7dd3fc;display:inline-block;vertical-align:middle;"></span>';
+  if(p.odp)          s += '<span title="ODP National Team" style="width:9px;height:9px;border-radius:50%;background:#16a34a;display:inline-block;vertical-align:middle;"></span>';
+  var iObj = interestDB[p.id] || {};
+  if(iObj.has_contacted) s += '<span title="Emailed Us" style="font-size:11px;line-height:1;">📧</span>';
+  if(iObj.is_camper || p.is_camper) s += '<span title="Camp Attendee" style="font-size:11px;line-height:1;">⛺</span>';
+  return s;
+}
+
 function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
   // Split players into home and away teams
   function isHome(p) { return clubNamesMatch(homeClub, p.club||''); }
@@ -2993,6 +3015,7 @@ function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
       badge +
       '<span style="flex:1;min-width:0;">' +
         '<span style="font-size:13px;font-weight:600;">' + (p.first||'') + ' ' + (p.last||'') + '</span>' +
+        (awardIcons(p) ? '<span style="display:inline-flex;align-items:center;gap:2px;margin-left:4px;vertical-align:middle;">' + awardIcons(p) + '</span>' : '') +
         (meta ? '<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;">' + meta + '</span>' : '') +
       '</span>' +
       ratingBadge +

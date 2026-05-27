@@ -2692,7 +2692,7 @@ function renderRatings(pid) {
         coachLabel +
         '<span style="background:' + scoreBg + ';color:' + scoreColor + ';font-weight:700;font-size:13px;padding:2px 8px;border-radius:8px;">' + r.score + '★</span>' +
         (dateStr ? '<span style="color:var(--muted);font-size:10px;margin-left:auto;">' + dateStr + '</span>' : '') +
-        (isOwn ? '<button onclick="deleteRating(''+pid+'','+origIdx+')" style="background:none;color:#ef4444;border:1px solid #fca5a5;border-radius:6px;padding:1px 7px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px;">✕</button>' : '') +
+        (isOwn ? "<button onclick=\"deleteRating('"+pid+"'," + origIdx + ");\" style=\"background:none;color:#ef4444;border:1px solid #fca5a5;border-radius:6px;padding:1px 7px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px;\">\u2715</button>" : "") +
       '</div>' +
       '<div class="re-meta" style="font-size:11px;color:var(--muted);margin-top:2px;">' + (r.event||'') + (r.half ? ' · ' + r.half : '') + '</div>' +
       (r.note ? '<div class="re-note" style="font-size:12px;color:#374151;margin-top:4px;font-style:italic;">"' + r.note + '"</div>' : '') +

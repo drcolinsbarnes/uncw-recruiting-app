@@ -627,15 +627,15 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
         </div>
         <div style="margin-top:12px;">
           <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px;">Interest Level</label>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="interestSelect" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);">
-              <option value="">— Not Set —</option>
-              <option value="emailed">Emailed Us</option>
-              <option value="camper">Camp Attendee</option>
-              <option value="high">High Interest</option>
-              <option value="offered">Offered</option>
-            </select>
-            <button onclick="saveInterestLevel()" class="btn-sm btn-teal" style="padding:8px 14px;white-space:nowrap;">Save</button>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);">
+              <input type="checkbox" id="interestEmailed" onchange="saveInterestLevel()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--teal);">
+              <span>📧 Emailed Us</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);">
+              <input type="checkbox" id="interestCamper" onchange="saveInterestLevel()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--teal);">
+              <span>⛺ Camp Attendee</span>
+            </label>
           </div>
           <div id="interestSaved" style="font-size:11px;color:var(--green);margin-top:4px;display:none;">✓ Saved</div>
         </div>
@@ -1473,7 +1473,7 @@ function loadAllDataFromSupabase() {
       supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
       supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
       supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
-      supa.from('interest').select('player_id,level').eq('school_id', SCHOOL_ID),
+      supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
       supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
       supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
       supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
@@ -1512,9 +1512,14 @@ function loadAllDataFromSupabase() {
     committedDB = {};
     committedRows.forEach(function(r){ committedDB[r.player_id] = r.school_name || ''; });
 
-    // interestDB: { pid: level }
+    // interestDB: { pid: {is_camper, has_contacted} }
     interestDB = {};
-    interestRows.forEach(function(r){ interestDB[r.player_id] = r.level; });
+    interestRows.forEach(function(r){
+      interestDB[r.player_id] = {
+        is_camper:     !!(r.is_camper || r.level === 'camper'),
+        has_contacted: !!(r.has_contacted || r.level === 'emailed')
+      };
+    });
 
     // watchDB: array of player_ids
     watchDB = watchRows.map(function(r){ return r.player_id; });
@@ -1537,6 +1542,9 @@ function loadAllDataFromSupabase() {
 
     // Apply awards from Supabase (match by full_name to ECNL players)
     applySupabaseAwards(awardRows);
+
+    // Auto-shortlist: players who emailed us AND have any award → permanent shortlist entry
+    autoShortlistContacts();
 
     // Apply overrides
     overrideRows.forEach(function(ov) {
@@ -1576,8 +1584,12 @@ function loadAllDataFromSupabase() {
 }
 
 // ── APPLY SUPABASE AWARDS (match by name) ────────────────────────────────
+// awardsDetail: { "full name lowercase": [ {type, season, conference, age_group, count} ] }
+var awardsDetail = {};
+
 function applySupabaseAwards(awardRows) {
-  // Build name → award counts map
+  awardsDetail = {};
+  // Build name → award counts map + detailed list
   var awardMap = {};
   awardRows.forEach(function(a) {
     var key = (a.full_name || '').toLowerCase().trim();
@@ -1591,13 +1603,25 @@ function applySupabaseAwards(awardRows) {
       case 'conf_second': m.conf_second++;  break;
       case 'odp':         m.odp++;          break;
     }
+    // Accumulate detailed list for year-labeled tags
+    if (!awardsDetail[key]) awardsDetail[key] = [];
+    // For YNT, accumulate callup count per season
+    if (a.award_type === 'ynt') {
+      var existing = awardsDetail[key].filter(function(x){ return x.type==='ynt' && x.season===a.season && x.age_group===a.age_group; });
+      if (existing.length) {
+        existing[0].count++;
+      } else {
+        awardsDetail[key].push({type:'ynt', season:a.season||'', conference:a.conference||'', age_group:a.age_group||'', count:1});
+      }
+    } else {
+      awardsDetail[key].push({type:a.award_type, season:a.season||'', conference:a.conference||'', age_group:a.age_group||'', count:1});
+    }
   });
   // Apply to players (Supabase awards take precedence over embedded flags)
   allPlayers.forEach(function(p) {
     var key = ((p.first||'') + ' ' + (p.last||'')).toLowerCase().trim();
     var a = awardMap[key];
     if (a) {
-      // Add to existing embedded flags (in case some are from old scrape)
       p.ynt          = Math.max(p.ynt||0, a.ynt);
       p.all_american = Math.max(p.all_american||0, a.all_american);
       p.conf_poy     = Math.max(p.conf_poy||0, a.conf_poy);
@@ -1606,6 +1630,131 @@ function applySupabaseAwards(awardRows) {
       p.odp          = Math.max(p.odp||0, a.odp);
     }
   });
+}
+
+// Return award tags with year labels for a player
+function getAwardTagsDetailed(p) {
+  var key = ((p.first||'') + ' ' + (p.last||'')).toLowerCase().trim();
+  var detail = awardsDetail[key] || [];
+  // Age group display: G2011 → U15 etc
+  function ageLabel(ag) {
+    var m = ag && ag.match(/G?(\d{4})/);
+    if (!m) return ag || '';
+    var yr = parseInt(m[1]);
+    // Convert grad year (birth year ~= grad - 18)
+    // Age group label: use the group as-is shortened
+    var map = {'G2006/2007':'U19/U18','G2006':'U19','G2007':'U18','G2008':'U17','G2009':'U16','G2010':'U15','G2011':'U14','G2012':'U13','G2013':'U12'};
+    return map[ag] || ag.replace('G','U');
+  }
+  var tags = '';
+  // Group: YNT by season
+  var yntBySeason = {};
+  detail.forEach(function(d) {
+    if (d.type !== 'ynt') return;
+    var k = d.season + '|' + d.age_group;
+    if (!yntBySeason[k]) yntBySeason[k] = {season:d.season, age_group:d.age_group, count:0};
+    yntBySeason[k].count += d.count;
+  });
+  Object.keys(yntBySeason).sort().forEach(function(k) {
+    var y = yntBySeason[k];
+    var label = 'YNT ' + y.season + (y.count > 1 ? ' ×' + y.count : '');
+    tags += '<span class="tag tag-ynt" title="US Youth National Team Call-Up">' + label + '</span>';
+  });
+  // Non-YNT awards
+  detail.forEach(function(d) {
+    if (d.type === 'ynt') return;
+    var season = d.season || '';
+    var ag = d.age_group ? ' (' + ageLabel(d.age_group) + ')' : '';
+    switch(d.type) {
+      case 'all_american': tags += '<span class="tag tag-aa">All-American ' + season + ag + '</span>'; break;
+      case 'conf_poy':     tags += '<span class="tag tag-poy">POY ' + season + ag + '</span>'; break;
+      case 'conf_first':   tags += '<span class="tag tag-ac1">1st Team ' + season + ag + '</span>'; break;
+      case 'conf_second':  tags += '<span class="tag tag-ac2">2nd Team ' + season + ag + '</span>'; break;
+      case 'odp':          tags += '<span class="tag tag-odp">ODP ' + season + ag + '</span>'; break;
+    }
+  });
+  // Fall back to count-based if no detail (embedded flags only)
+  if (!detail.length) {
+    if(p.ynt)          tags += '<span class="tag tag-ynt">YNT</span>';
+    if(p.all_american) tags += '<span class="tag tag-aa">All-American</span>';
+    if(p.conf_poy)     tags += '<span class="tag tag-poy">POY</span>';
+    if(p.conf_first)   tags += '<span class="tag tag-ac1">1st Team</span>';
+    if(p.conf_second)  tags += '<span class="tag tag-ac2">2nd Team</span>';
+    if(p.odp)          tags += '<span class="tag tag-odp">ODP</span>';
+  }
+  return tags;
+}
+
+// Return award detail lines for the detail view
+function getAwardDetailLines(p) {
+  var key = ((p.first||'') + ' ' + (p.last||'')).toLowerCase().trim();
+  var detail = awardsDetail[key] || [];
+  function ageLabel(ag) {
+    var map = {'G2006/2007':'U19/U18','G2006':'U19','G2007':'U18','G2008':'U17','G2009':'U16','G2010':'U15','G2011':'U14','G2012':'U13','G2013':'U12'};
+    return map[ag] || (ag||'').replace('G','U');
+  }
+  var lines = [];
+  // YNT grouped by season
+  var yntBySeason = {};
+  detail.forEach(function(d) {
+    if (d.type !== 'ynt') return;
+    var k = d.season + '|' + d.age_group;
+    if (!yntBySeason[k]) yntBySeason[k] = {season:d.season, age_group:d.age_group, count:0};
+    yntBySeason[k].count += d.count;
+  });
+  Object.keys(yntBySeason).sort().reverse().forEach(function(k) {
+    var y = yntBySeason[k];
+    var xtra = y.count > 1 ? ' ×' + y.count + ' call-ups' : ' call-up';
+    lines.push('🇺🇸 US Youth National Team ' + y.season + ' (' + ageLabel(y.age_group) + ')' + xtra);
+  });
+  // Non-YNT
+  detail.filter(function(d){ return d.type !== 'ynt'; }).forEach(function(d) {
+    var ag = d.age_group ? ' (' + ageLabel(d.age_group) + ')' : '';
+    var s = d.season ? ' ' + d.season : '';
+    switch(d.type) {
+      case 'all_american': lines.push('🏆 ECNL All-American' + s + ag); break;
+      case 'conf_poy':     lines.push('🥇 Conference Player of the Year' + s + ag); break;
+      case 'conf_first':   lines.push('⭐ All-Conference 1st Team' + s + ag); break;
+      case 'conf_second':  lines.push('🌟 All-Conference 2nd Team' + s + ag); break;
+      case 'odp':          lines.push('🔷 ODP National Team' + s + ag); break;
+    }
+  });
+  // Fallback for embedded-only
+  if (!detail.length) {
+    if(p.ynt)          lines.push('🇺🇸 US Youth National Team (' + p.ynt + 'x call-up' + (p.ynt>1?'s':'') + ')');
+    if(p.all_american) lines.push('🏆 ECNL All-American');
+    if(p.conf_poy)     lines.push('🥇 Conference Player of the Year');
+    if(p.conf_first)   lines.push('⭐ All-Conference 1st Team');
+    if(p.conf_second)  lines.push('🌟 All-Conference 2nd Team');
+    if(p.odp)          lines.push('🔷 ODP National Team');
+  }
+  return lines;
+}
+
+// ── AUTO-SHORTLIST CONTACTS WITH AWARDS ─────────────────────────────────
+function autoShortlistContacts() {
+  // Find players where has_contacted=true AND has any award → add to shortlist permanently
+  var toAdd = [];
+  allPlayers.forEach(function(p) {
+    var iObj = interestDB[p.id];
+    if (!iObj || !iObj.has_contacted) return;          // not contacted us
+    var hasAward = p.ynt || p.all_american || p.conf_poy || p.conf_first || p.conf_second || p.odp;
+    if (!hasAward) return;                              // no award to trigger
+    if (shortlistDB.indexOf(p.id) >= 0) return;        // already shortlisted
+    toAdd.push(p.id);
+  });
+  if (!toAdd.length) return;
+  toAdd.forEach(function(pid) {
+    shortlistDB.push(pid);
+    // Write to Supabase silently (auto, not user-triggered)
+    supa.from('shortlist')
+      .upsert({ school_id: SCHOOL_ID, player_id: pid, set_by: currentCoachId },
+               { onConflict: 'school_id,player_id' })
+      .then(function(r) {
+        if (r.error) console.warn('Auto-shortlist error for ' + pid + ': ' + r.error.message);
+      });
+  });
+  if (toAdd.length) console.log('[Auto-shortlist] Added ' + toAdd.length + ' players who contacted us + have awards.');
 }
 
 // ── REAL-TIME SUBSCRIPTIONS ──────────────────────────────────────────────
@@ -1662,7 +1811,10 @@ function handleInterestChange(payload) {
   if (payload.eventType === 'DELETE') {
     delete interestDB[pid];
   } else {
-    interestDB[pid] = payload.new.level;
+    interestDB[pid] = {
+      is_camper:     !!(payload.new.is_camper || payload.new.level === 'camper'),
+      has_contacted: !!(payload.new.has_contacted || payload.new.level === 'emailed')
+    };
   }
   updateInsights();
 }
@@ -1769,32 +1921,47 @@ function saveCommitment() {
 // ── SAVE INTEREST LEVEL (write-on-action) ────────────────────────────────
 function saveInterestLevel() {
   if (!currentPID) return;
-  var val = document.getElementById('interestSelect').value;
-  interestDB[currentPID] = val;
-  setSyncing();
-  if (val) {
-    supa.from('interest')
-      .upsert({ school_id: SCHOOL_ID, player_id: currentPID, level: val, set_by: currentCoachId },
-               { onConflict: 'school_id,player_id' })
-      .then(function(r) {
-        if (r.error) setSyncStatus('Interest error: ' + r.error.message, true);
-        else {
-          setSyncStatus('✓ Interest level saved');
-          var saved = document.getElementById('interestSaved');
-          if (saved) { saved.style.display=''; setTimeout(function(){ saved.style.display='none'; }, 2000); }
-        }
-      });
-  } else {
+  var isCamper  = document.getElementById('interestCamper')  ? document.getElementById('interestCamper').checked  : false;
+  var isEmailed = document.getElementById('interestEmailed') ? document.getElementById('interestEmailed').checked : false;
+  var neither   = !isCamper && !isEmailed;
+  if (neither) {
     delete interestDB[currentPID];
+    setSyncing();
     supa.from('interest')
       .delete()
       .eq('school_id', SCHOOL_ID)
       .eq('player_id', currentPID)
       .then(function(r) {
         if (r.error) setSyncStatus('Interest error: ' + r.error.message, true);
-        else setSyncStatus('✓ Interest level cleared');
+        else {
+          setSyncStatus('✓ Interest cleared');
+          var saved = document.getElementById('interestSaved');
+          if (saved) { saved.style.display=''; setTimeout(function(){ saved.style.display='none'; }, 2000); }
+        }
       });
+    return;
   }
+  interestDB[currentPID] = { is_camper: isCamper, has_contacted: isEmailed };
+  setSyncing();
+  // Derive legacy level for backward compat (keep level column updated too)
+  var legacyLevel = isEmailed ? 'emailed' : (isCamper ? 'camper' : '');
+  supa.from('interest')
+    .upsert({
+      school_id:     SCHOOL_ID,
+      player_id:     currentPID,
+      is_camper:     isCamper,
+      has_contacted: isEmailed,
+      level:         legacyLevel,
+      set_by:        currentCoachId
+    }, { onConflict: 'school_id,player_id' })
+    .then(function(r) {
+      if (r.error) setSyncStatus('Interest error: ' + r.error.message, true);
+      else {
+        setSyncStatus('✓ Interest saved');
+        var saved = document.getElementById('interestSaved');
+        if (saved) { saved.style.display=''; setTimeout(function(){ saved.style.display='none'; }, 2000); }
+      }
+    });
 }
 
 // ── TOGGLE WATCH FROM DETAIL ─────────────────────────────────────────────
@@ -2211,10 +2378,10 @@ function applyFilters() {
     if(rFilter === 'unrated')   return avg === 0;
     if(rFilter === 'shortlist') return shortlistDB.indexOf(p.id) >= 0;
     if(rFilter === 'watch')     return watchDB.indexOf(p.id) >= 0;
-    if(rFilter === 'emailed')   return interestDB[p.id] === 'emailed';
-    if(rFilter === 'camper')    return interestDB[p.id] === 'camper' || p.is_camper;
-    if(rFilter === 'high')      return interestDB[p.id] === 'high';
-    if(rFilter === 'offered')   return interestDB[p.id] === 'offered';
+    if(rFilter === 'emailed')   return !!(interestDB[p.id] && interestDB[p.id].has_contacted);
+    if(rFilter === 'camper')    return !!(p.is_camper || (interestDB[p.id] && interestDB[p.id].is_camper));
+    if(rFilter === 'high')      return false; // high/offered now handled via shortlist
+    if(rFilter === 'offered')   return false;
     if(rFilter === '5') return avg >= 4.5;
     if(rFilter === '4') return avg >= 3.5;
     if(rFilter === '3') return avg >= 2.5;
@@ -2242,7 +2409,7 @@ function clearFilters() {
 // ── RENDER LIST ──
 var currentListContext = 'Players';
 var watchDB    = [];   // array of PIDs on watch list
-var interestDB = {};   // pid -> interest level string
+var interestDB = {};   // pid -> {is_camper: bool, has_contacted: bool}
 function renderPlayerList() {
   currentListContext = 'Players';
   var list = document.getElementById('playerList');
@@ -2259,7 +2426,19 @@ function isCommittedUNCW(p) {
   return committed === 'UNC Wilmington';
 }
 function getInterestLevel(pid) {
-  return interestDB[pid] || '';
+  return interestDB[pid] || {is_camper: false, has_contacted: false};
+}
+function hasAnyInterest(pid) {
+  var o = interestDB[pid];
+  return !!(o && (o.is_camper || o.has_contacted));
+}
+function isContacted(pid) {
+  var o = interestDB[pid];
+  return !!(o && o.has_contacted);
+}
+function isCamper(pid) {
+  var o = interestDB[pid];
+  return !!(o && o.is_camper);
 }
 var INTEREST_LABELS = {
   'emailed':   {label:'Emailed Us',    cls:'tag-il-email'},
@@ -2275,20 +2454,14 @@ function buildCard(p) {
   var sel  = selectedPIDs.indexOf(p.id) >= 0;
   var pid  = p.id;
   var uncw = isCommittedUNCW(p);
-  var il   = getInterestLevel(pid);
+  var iObj  = getInterestLevel(pid);
+  var isCamp    = !!(p.is_camper || iObj.is_camper);
+  var isContacted = !!(iObj.has_contacted);
   var rClass = avg >= 4.5 ? 'rating-5' : avg >= 3.5 ? 'rating-4' : avg >= 2.5 ? 'rating-3' : avg >= 1.5 ? 'rating-2' : avg > 0 ? 'rating-1' : 'rating-0';
   var rLabel = avg > 0 ? avg.toFixed(1) : 'Unrated';
-  var awards = '';
-  if(p.ynt)          awards += '<span class="tag tag-ynt">YNT</span>';
-  if(p.all_american) awards += '<span class="tag tag-aa">All-American</span>';
-  if(p.conf_poy)     awards += '<span class="tag tag-poy">POY</span>';
-  if(p.conf_first)   awards += '<span class="tag tag-ac1">1st Team</span>';
-  if(p.conf_second)  awards += '<span class="tag tag-ac2">2nd Team</span>';
-  if(p.odp)          awards += '<span class="tag tag-odp">ODP</span>';
-  if(p.is_camper || il==='camper') awards += '<span class="tag tag-il-camp">Camp Attendee</span>';
-  if(il==='emailed') awards += '<span class="tag tag-il-email">Emailed Us</span>';
-  if(il==='high')    awards += '<span class="tag tag-il-high">High Interest</span>';
-  if(il==='offered') awards += '<span class="tag tag-il-offer">Offered</span>';
+  var awards = getAwardTagsDetailed(p);
+  if(isCamp)       awards += '<span class="tag tag-il-camp">⛺ Camp</span>';
+  if(isContacted)  awards += '<span class="tag tag-il-email">📧 Emailed Us</span>';
   if(isWL && !uncw)  awards += '<span class="tag tag-watch">Watch List</span>';
   if(uncw)           awards += '<span class="tag" style="background:var(--gold);color:var(--navy);">UNCW Commit</span>';
   var cbHtml = bulkMode
@@ -2381,9 +2554,12 @@ function openDetail(pid, from) {
   var committed = committedDB[pid] || p.committed || '';
   populateCommitmentDropdown(committed);
 
-  // Interest level
-  var iSel = document.getElementById('interestSelect');
-  if(iSel) iSel.value = interestDB[pid] || '';
+  // Interest checkboxes
+  var iObj = interestDB[pid] || {is_camper: false, has_contacted: false};
+  var iCamper  = document.getElementById('interestCamper');
+  var iEmailed = document.getElementById('interestEmailed');
+  if(iCamper)  iCamper.checked  = !!(iObj.is_camper);
+  if(iEmailed) iEmailed.checked = !!(iObj.has_contacted);
 
   // Watch list button
   var wBtn = document.getElementById('watchToggleBtn');
@@ -2408,12 +2584,9 @@ function openDetail(pid, from) {
 
   // Awards — always show card
   var awards = [];
-  if(p.ynt)          awards.push('🇺🇸 US Youth National Team (' + p.ynt + 'x call-up' + (p.ynt>1?'s':'') + ')');
-  if(p.all_american) awards.push('🏆 ECNL All-American');
-  if(p.conf_poy)     awards.push('🥇 Conference Player of the Year');
-  if(p.conf_first)   awards.push('⭐ All-Conference 1st Team');
-  if(p.conf_second)  awards.push('🌟 All-Conference 2nd Team');
-  if(p.odp)          awards.push('🔷 ODP National Team');
+  // Year-labeled award detail lines (replaces flat list)
+  var detailLines = getAwardDetailLines(p);
+  detailLines.forEach(function(line){ awards.push(line); });
   document.getElementById('detailAwards').innerHTML = awards.length
     ? awards.map(function(a){ return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">'+a+'</div>'; }).join('')
     : '<p style="color:var(--muted);font-size:13px;font-style:italic;">No awards on file.</p>';
@@ -2725,7 +2898,7 @@ function teamHasPlayers(teamName, matchAge, checkMode) {
     // Club name must match (prefix-based to handle suffix differences)
     if(!clubNamesMatch(teamName, p.club)) return false;
     var isSL  = shortlistDB.indexOf(p.id) >= 0;
-    var isInt = !!interestDB[p.id];
+    var isInt = hasAnyInterest(p.id);
     if(checkMode === 'shortlist' && isSL)  { found = true; return true; }
     if(checkMode === 'interest'  && isInt) { found = true; return true; }
     if(checkMode === 'either' && (isSL || isInt)) { found = true; return true; }
@@ -2742,7 +2915,7 @@ function getTeamPlayerBadges(teamName, matchAge) {
     if(p.age_group !== matchAge) return;
     if(!clubNamesMatch(teamName, p.club)) return;
     if(shortlistDB.indexOf(p.id) >= 0) hasSL = true;
-    if(interestDB[p.id]) hasInt = true;
+    if(hasAnyInterest(p.id)) hasInt = true;
   });
   return {hasSL:hasSL, hasInt:hasInt};
 }
@@ -2768,7 +2941,7 @@ function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
     // Rest sorted by jersey asc only
     var hi = [], rest = [];
     team.forEach(function(p){
-      if(shortlistDB.indexOf(p.id) >= 0 || !!interestDB[p.id]) hi.push(p);
+      if(shortlistDB.indexOf(p.id) >= 0 || hasAnyInterest(p.id)) hi.push(p);
       else rest.push(p);
     });
     hi.sort(function(a,b){
@@ -2782,7 +2955,7 @@ function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
 
   function buildRow(p) {
     var isSL  = shortlistDB.indexOf(p.id) >= 0;
-    var isInt = !!interestDB[p.id];
+    var isInt = hasAnyInterest(p.id);
     var avg   = getAvg(p.id);
     var badge = isSL  ? '<span style="color:#e05c00;font-weight:700;flex-shrink:0;">★</span>' :
                 isInt ? '<span style="color:#b07800;font-weight:700;flex-shrink:0;">◆</span>' : '';

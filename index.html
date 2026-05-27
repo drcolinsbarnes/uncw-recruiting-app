@@ -124,6 +124,9 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
 /* Watch list card accent */
 .player-card.on-watchlist { border-color: #7c3aed; }
 .player-card.on-watchlist .card-jersey { background: #7c3aed; }
+/* YNT gold border */
+.player-card.ynt-player { border-color: var(--gold); }
+.player-card.ynt-player .card-jersey { background: var(--gold); color: var(--navy); }
 .watch-btn { position: absolute; bottom: 10px; right: 38px; font-size: 16px; background: none;
              border: none; cursor: pointer; line-height: 1; padding: 4px; color: #7c3aed; }
 
@@ -360,8 +363,8 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
           <option value="watch">Watch List</option>
           <option value="emailed">Emailed Us</option>
           <option value="camper">Camp Attendee</option>
-          <option value="high">High Interest</option>
-          <option value="offered">Offered</option>
+          <option value="ynt">🇺🇸 YNT Call-Up</option>
+          <option value="odp">🔷 ODP National Team</option>
         </select>
         <button class="btn-sm btn-teal" onclick="toggleBulk()" id="bulkToggleBtn" title="Select players">☑</button>
       </div>
@@ -2380,8 +2383,8 @@ function applyFilters() {
     if(rFilter === 'watch')     return watchDB.indexOf(p.id) >= 0;
     if(rFilter === 'emailed')   return !!(interestDB[p.id] && interestDB[p.id].has_contacted);
     if(rFilter === 'camper')    return !!(p.is_camper || (interestDB[p.id] && interestDB[p.id].is_camper));
-    if(rFilter === 'high')      return false; // high/offered now handled via shortlist
-    if(rFilter === 'offered')   return false;
+    if(rFilter === 'ynt')        return !!(p.ynt && p.ynt > 0);
+    if(rFilter === 'odp')        return !!(p.odp && p.odp > 0);
     if(rFilter === '5') return avg >= 4.5;
     if(rFilter === '4') return avg >= 3.5;
     if(rFilter === '3') return avg >= 2.5;
@@ -2468,10 +2471,12 @@ function buildCard(p) {
     ? '<div class="card-checkbox-wrap show"><input type="checkbox" class="card-cb"' + (sel?' checked':'') +
       ' onclick="event.stopPropagation();toggleCardSelect(\'' + pid + '\',this)"></div>'
     : '';
+  var isYNT = !!(p.ynt && p.ynt > 0);
   return '<div class="player-card' +
     (sel  ? ' selected'      : '') +
     (uncw ? ' committed-uncw': '') +
-    (isWL && !uncw ? ' on-watchlist' : '') +
+    (isYNT && !uncw ? ' ynt-player' : '') +
+    (isWL && !uncw && !isYNT ? ' on-watchlist' : '') +
     '" onclick="cardClick(\'' + pid + '\')" data-pid="' + pid + '">' +
     cbHtml +
     '<div class="card-top" style="flex:1;display:flex;align-items:flex-start;gap:10px;">' +

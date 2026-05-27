@@ -2759,45 +2759,79 @@ function clearSchedFilters(){
 
 
 // ── BUILD MATCH PLAYER LIST (shown when schedule card is tapped) ──────────
-function buildMatchPlayerList(players, matchId) {
-  // Sort: shortlisted first, then interested, then rest — all by jersey number
-  players.sort(function(a,b){
-    var asl = shortlistDB.indexOf(a.id) >= 0;
-    var bsl = shortlistDB.indexOf(b.id) >= 0;
-    var aint = !!interestDB[a.id];
-    var bint = !!interestDB[b.id];
-    var aScore = asl ? 0 : (aint ? 1 : 2);
-    var bScore = bsl ? 0 : (bint ? 1 : 2);
-    if(aScore !== bScore) return aScore - bScore;
-    return (parseInt(a.jersey)||999) - (parseInt(b.jersey)||999);
-  });
+function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
+  // Split players into home and away teams
+  function isHome(p) { return clubNamesMatch(homeClub, p.club||''); }
 
-  var rows = players.map(function(p){
+  function sortTeam(team) {
+    // Highlighted players (SL or interest) bubble to top, sorted by avg desc then jersey asc
+    // Rest sorted by jersey asc only
+    var hi = [], rest = [];
+    team.forEach(function(p){
+      if(shortlistDB.indexOf(p.id) >= 0 || !!interestDB[p.id]) hi.push(p);
+      else rest.push(p);
+    });
+    hi.sort(function(a,b){
+      var aAvg = getAvg(a.id), bAvg = getAvg(b.id);
+      if(bAvg !== aAvg) return bAvg - aAvg;
+      return (parseInt(a.jersey)||999) - (parseInt(b.jersey)||999);
+    });
+    rest.sort(function(a,b){ return (parseInt(a.jersey)||999) - (parseInt(b.jersey)||999); });
+    return hi.concat(rest);
+  }
+
+  function buildRow(p) {
     var isSL  = shortlistDB.indexOf(p.id) >= 0;
     var isInt = !!interestDB[p.id];
     var avg   = getAvg(p.id);
-    var badge = isSL  ? '<span style="color:#e05c00;font-weight:700;">★</span> ' :
-                isInt ? '<span style="color:#b07800;font-weight:700;">◆</span> ' : '';
+    var badge = isSL  ? '<span style="color:#e05c00;font-weight:700;flex-shrink:0;">★</span>' :
+                isInt ? '<span style="color:#b07800;font-weight:700;flex-shrink:0;">◆</span>' : '';
     var ratingBadge = avg > 0
-      ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;margin-left:4px;">' + avg.toFixed(1) + '</span>'
+      ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 5px;border-radius:6px;flex-shrink:0;">' + avg.toFixed(1) + '</span>'
       : '';
-    var highlight = isSL  ? 'background:#fff7ed;border-left:3px solid #e05c00;' :
-                    isInt ? 'background:#fffbeb;border-left:3px solid #f0c040;' : 'border-left:3px solid transparent;';
+    // Only highlight the individual highlighted player rows, not the whole team
+    var rowBg = isSL  ? 'background:#fff7ed;border-left:3px solid #e05c00;'
+              : isInt ? 'background:#fffbeb;border-left:3px solid #f0c040;'
+              : 'background:transparent;border-left:3px solid transparent;';
+    var pos  = p.position  ? p.position  : '';
+    var grad = p.grad_year ? p.grad_year : '';
+    var meta = [pos, grad].filter(Boolean).join(' · ');
     return '<div onclick="event.stopPropagation();openDetail(\'' + p.id + '\',\'Schedule\')" ' +
-      'style="padding:7px 10px;' + highlight + 'display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px solid var(--border);">' +
-      '<span style="width:24px;text-align:center;font-size:12px;color:var(--muted);">#' + (p.jersey||'–') + '</span>' +
+      'style="padding:6px 10px;' + rowBg + 'display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px solid var(--border);">' +
+      '<span style="width:24px;text-align:center;font-size:11px;color:var(--muted);flex-shrink:0;">#' + (p.jersey||'–') + '</span>' +
       badge +
-      '<span style="flex:1;font-size:13px;font-weight:600;">' + (p.first||'') + ' ' + (p.last||'') + '</span>' +
+      '<span style="flex:1;min-width:0;">' +
+        '<span style="font-size:13px;font-weight:600;">' + (p.first||'') + ' ' + (p.last||'') + '</span>' +
+        (meta ? '<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;margin-top:1px;">' + meta + '</span>' : '') +
+      '</span>' +
       ratingBadge +
       '<button onclick="event.stopPropagation();currentPID=\'' + p.id + '\';openRatingForm();" ' +
-        'style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;">+ Rate</button>' +
+        'style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0;">+ Rate</button>' +
       '</div>';
-  }).join('');
+  }
 
-  return '<div id="' + matchId + '" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">' +
-    '<div style="background:var(--navy);color:#fff;padding:5px 10px;font-size:11px;font-weight:700;letter-spacing:.05em;">PLAYERS IN THIS GAME</div>' +
-    rows +
-    '</div>';
+  function teamHeader(name) {
+    return '<div style="background:#f0f0f0;padding:5px 10px;font-size:10px;font-weight:700;letter-spacing:.06em;color:#555;border-bottom:1px solid var(--border);">' +
+      name.toUpperCase() + '</div>';
+  }
+
+  var homePlayers = sortTeam(players.filter(isHome));
+  var awayPlayers = sortTeam(players.filter(function(p){ return !isHome(p); }));
+
+  var html = '<div id="' + matchId + '" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">' +
+    '<div style="background:var(--navy);color:#fff;padding:5px 10px;font-size:11px;font-weight:700;letter-spacing:.05em;">PLAYERS IN THIS GAME</div>';
+
+  if(homePlayers.length) {
+    html += teamHeader(homeClub);
+    html += homePlayers.map(buildRow).join('');
+  }
+  if(awayPlayers.length) {
+    html += teamHeader(awayClub);
+    html += awayPlayers.map(buildRow).join('');
+  }
+
+  html += '</div>';
+  return html;
 }
 
 function toggleMatchPlayers(matchId) {
@@ -2883,7 +2917,7 @@ function renderSchedule(){
           (badges ? '<div class="match-badges">' + badges + '</div>' : '') +
           '<span style="margin-left:auto;font-size:11px;color:var(--muted);">' + matchPlayers.length + ' players ▾</span>' +
         '</div>' +
-        (matchPlayers.length ? buildMatchPlayerList(matchPlayers, matchId) : '') +
+        (matchPlayers.length ? buildMatchPlayerList(matchPlayers, matchId, m.home, m.away) : '') +
         '</div>';
     });
     html += '</div>';

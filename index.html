@@ -2783,13 +2783,13 @@ function buildMatchPlayerList(players, matchId) {
       : '';
     var highlight = isSL  ? 'background:#fff7ed;border-left:3px solid #e05c00;' :
                     isInt ? 'background:#fffbeb;border-left:3px solid #f0c040;' : 'border-left:3px solid transparent;';
-    return '<div onclick="event.stopPropagation();openDetail('' + p.id + '','Schedule')" ' +
+    return '<div onclick="event.stopPropagation();openDetail(\'' + p.id + '\',\'Schedule\')" ' +
       'style="padding:7px 10px;' + highlight + 'display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px solid var(--border);">' +
       '<span style="width:24px;text-align:center;font-size:12px;color:var(--muted);">#' + (p.jersey||'–') + '</span>' +
       badge +
       '<span style="flex:1;font-size:13px;font-weight:600;">' + (p.first||'') + ' ' + (p.last||'') + '</span>' +
       ratingBadge +
-      '<button onclick="event.stopPropagation();currentPID='' + p.id + '';openRatingForm();" ' +
+      '<button onclick="event.stopPropagation();currentPID=\'' + p.id + '\';openRatingForm();" ' +
         'style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;">+ Rate</button>' +
       '</div>';
   }).join('');
@@ -2875,7 +2875,7 @@ function renderSchedule(){
       });
       var matchId = 'match_' + m.time.replace(/[^a-z0-9]/gi,'') + '_' + m.field.replace(/[^a-z0-9]/gi,'');
 
-      html += '<div class="' + cardClass + '" onclick="toggleMatchPlayers('' + matchId + '')" style="cursor:pointer;">' +
+      html += '<div class="' + cardClass + '" onclick="toggleMatchPlayers(\'' + matchId + '\')" style="cursor:pointer;">' +
         '<div class="match-time">' + m.time + ' · ' + m.field + '</div>' +
         '<div class="match-teams">' + homeLabel + ' <span style="color:var(--muted);font-weight:400;">vs</span> ' + awayLabel + '</div>' +
         '<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +

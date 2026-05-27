@@ -1446,6 +1446,26 @@ function doSignOut() {
   supa.auth.signOut().then(function() { showLoginScreen(); });
 }
 
+// ── FETCH ALL AWARDS (paginated, bypasses Supabase 1000-row limit) ─────────
+function fetchAllAwards() {
+  var PAGE = 1000;
+  var allRows = [];
+  function fetchPage(from) {
+    return supa.from('awards').select('*').range(from, from + PAGE - 1)
+      .then(function(r) {
+        if (r.error) return allRows;
+        allRows = allRows.concat(r.data || []);
+        if ((r.data || []).length === PAGE) {
+          return fetchPage(from + PAGE);  // more pages
+        }
+        return allRows;
+      });
+  }
+  return fetchPage(0).then(function(rows) {
+    return { data: rows, error: null };
+  });
+}
+
 // ── LOAD ALL DATA FROM SUPABASE ──────────────────────────────────────────
 function loadAllDataFromSupabase() {
   document.getElementById('loadingOverlay').style.display = 'flex';
@@ -1480,7 +1500,7 @@ function loadAllDataFromSupabase() {
       supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
       supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
       supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
-      supa.from('awards').select('*')
+      fetchAllAwards()
     ]);
   })
   .then(function(results) {

@@ -788,6 +788,7 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
       <label>Grad Year</label>
       <select id="editGradYear" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
         <option value="">— Select —</option>
+        <option value="2007">2007/08 (U19)</option>
         <option>2025</option><option>2026</option><option>2027</option>
         <option>2028</option><option>2029</option><option>2030</option>
         <option>2031</option><option>2032</option>
@@ -2131,9 +2132,19 @@ function safeParseJSON(str, fallback) {
 
 // ── DROPDOWNS ──
 function populateDropdowns() {
-  var clubs = {};
-  allPlayers.forEach(function(p){ if(p.club) clubs[p.club]=1; });
-  var sorted = Object.keys(clubs).sort();
+  // Only show clubs from ECNL players (id starts with CL-)
+  // Camp/manual players (CAMP-) get bucketed as "Non-ECNL"
+  var ecnlClubs = {};
+  var hasNonEcnl = false;
+  allPlayers.forEach(function(p){
+    if(!p.club) return;
+    if(p.id && p.id.indexOf('CL-') === 0) {
+      ecnlClubs[p.club] = 1;
+    } else {
+      hasNonEcnl = true;
+    }
+  });
+  var sorted = Object.keys(ecnlClubs).sort();
   ['fClub','slClub','wlClub'].forEach(function(id){
     var el = document.getElementById(id);
     if(!el) return;
@@ -2143,6 +2154,11 @@ function populateDropdowns() {
       o.value = c; o.textContent = c;
       el.appendChild(o);
     });
+    if(hasNonEcnl){
+      var o = document.createElement('option');
+      o.value = '__non_ecnl__'; o.textContent = 'Non-ECNL / Camp Players';
+      el.appendChild(o);
+    }
   });
 }
 
@@ -2176,7 +2192,13 @@ function applyFilters() {
   var rFilter  = document.getElementById('fRating').value;
 
   filteredPlayers = allPlayers.filter(function(p){
-    if(club   && p.club !== club) return false;
+    if(club) {
+      if(club === '__non_ecnl__') {
+        if(p.id && p.id.indexOf('CL-') === 0) return false;
+      } else {
+        if(p.club !== club) return false;
+      }
+    }
     if(grad   && String(p.grad_year) !== grad) return false;
     if(age    && p.age_group !== age) return false;
     if(pos    && p.position && p.position.indexOf(pos) < 0) return false;
@@ -2415,23 +2437,27 @@ function openDetail(pid, from) {
     contactGrid.innerHTML = '<p style="color:var(--muted);font-size:13px;font-style:italic;">No contact info on file. Add via team profile import.</p>';
   }
 
-  //   // Showcase matches
+  //   // Showcase matches — match by BOTH club name AND age group
   var allMatches = [];
   SCHEDULE.forEach(function(day){
     day.matches.forEach(function(m){
-      allMatches.push({date:day.date, time:m.time, home:m.home, away:m.away});
+      allMatches.push({date:day.date, time:m.time, home:m.home, away:m.away, age:m.age});
     });
   });
   var club = (p.club||'').toLowerCase();
+  var pAge = (p.age_group||'').trim(); // e.g. "G2009"
   var clubMatches = allMatches.filter(function(m){
-    return m.home.toLowerCase().indexOf(club)>=0 || m.away.toLowerCase().indexOf(club)>=0;
+    var nameMatch = clubNamesMatch(m.home, p.club||'') || clubNamesMatch(m.away, p.club||'');
+    // Age group must also match if we know it
+    var ageMatch = !pAge || !m.age || m.age === pAge;
+    return nameMatch && ageMatch;
   });
   var mCard = document.getElementById('detailMatchesCard');
   var mTabs = document.getElementById('matchTabs');
   if(clubMatches.length){
     mCard.style.display='';
     mTabs.innerHTML = clubMatches.map(function(m,i){
-      return '<span class="match-tab'+(i===0?' active':'')+'">' + m.date + ' ' + m.time + '</span>';
+      return '<span class="match-tab'+(i===0?' active':'')+'">' + m.date.split(' ·')[0] + ' · ' + m.time + '</span>';
     }).join('');
   } else {
     mCard.style.display='none';
@@ -2581,7 +2607,10 @@ function renderShortlist() {
     return allPlayers.filter(function(x){return x.id===pid;})[0];
   }).filter(function(p){
     if(!p) return false;
-    if(club   && p.club !== club) return false;
+    if(club) {
+      if(club === '__non_ecnl__') { if(p.id && p.id.indexOf('CL-') === 0) return false; }
+      else { if(p.club !== club) return false; }
+    }
     if(grad   && String(p.grad_year) !== grad) return false;
     if(age    && p.age_group !== age) return false;
     if(pos    && p.position && p.position.indexOf(pos)<0) return false;
@@ -2728,6 +2757,55 @@ function clearSchedFilters(){
   renderSchedule();
 }
 
+
+// ── BUILD MATCH PLAYER LIST (shown when schedule card is tapped) ──────────
+function buildMatchPlayerList(players, matchId) {
+  // Sort: shortlisted first, then interested, then rest — all by jersey number
+  players.sort(function(a,b){
+    var asl = shortlistDB.indexOf(a.id) >= 0;
+    var bsl = shortlistDB.indexOf(b.id) >= 0;
+    var aint = !!interestDB[a.id];
+    var bint = !!interestDB[b.id];
+    var aScore = asl ? 0 : (aint ? 1 : 2);
+    var bScore = bsl ? 0 : (bint ? 1 : 2);
+    if(aScore !== bScore) return aScore - bScore;
+    return (parseInt(a.jersey)||999) - (parseInt(b.jersey)||999);
+  });
+
+  var rows = players.map(function(p){
+    var isSL  = shortlistDB.indexOf(p.id) >= 0;
+    var isInt = !!interestDB[p.id];
+    var avg   = getAvg(p.id);
+    var badge = isSL  ? '<span style="color:#e05c00;font-weight:700;">★</span> ' :
+                isInt ? '<span style="color:#b07800;font-weight:700;">◆</span> ' : '';
+    var ratingBadge = avg > 0
+      ? '<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;margin-left:4px;">' + avg.toFixed(1) + '</span>'
+      : '';
+    var highlight = isSL  ? 'background:#fff7ed;border-left:3px solid #e05c00;' :
+                    isInt ? 'background:#fffbeb;border-left:3px solid #f0c040;' : 'border-left:3px solid transparent;';
+    return '<div onclick="event.stopPropagation();openDetail('' + p.id + '','Schedule')" ' +
+      'style="padding:7px 10px;' + highlight + 'display:flex;align-items:center;gap:6px;cursor:pointer;border-bottom:1px solid var(--border);">' +
+      '<span style="width:24px;text-align:center;font-size:12px;color:var(--muted);">#' + (p.jersey||'–') + '</span>' +
+      badge +
+      '<span style="flex:1;font-size:13px;font-weight:600;">' + (p.first||'') + ' ' + (p.last||'') + '</span>' +
+      ratingBadge +
+      '<button onclick="event.stopPropagation();currentPID='' + p.id + '';openRatingForm();" ' +
+        'style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;">+ Rate</button>' +
+      '</div>';
+  }).join('');
+
+  return '<div id="' + matchId + '" style="display:none;margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">' +
+    '<div style="background:var(--navy);color:#fff;padding:5px 10px;font-size:11px;font-weight:700;letter-spacing:.05em;">PLAYERS IN THIS GAME</div>' +
+    rows +
+    '</div>';
+}
+
+function toggleMatchPlayers(matchId) {
+  var el = document.getElementById(matchId);
+  if(!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
 function renderSchedule(){
   var fDay   = document.getElementById('sfDay').value;
   var fAge   = document.getElementById('sfAge').value;
@@ -2789,13 +2867,23 @@ function renderSchedule(){
       if(hasSL)  badges += '<span class="match-badge sl">★ Shortlisted</span>';
       if(hasInt) badges += '<span class="match-badge int">◆ Interested</span>';
 
-      html += '<div class="' + cardClass + '">' +
+      // Build player list for this match (both teams, filtered by age group)
+      var matchPlayers = allPlayers.filter(function(p){
+        if(!p.club || !p.age_group) return false;
+        if(p.age_group !== m.age) return false;
+        return clubNamesMatch(m.home, p.club) || clubNamesMatch(m.away, p.club);
+      });
+      var matchId = 'match_' + m.time.replace(/[^a-z0-9]/gi,'') + '_' + m.field.replace(/[^a-z0-9]/gi,'');
+
+      html += '<div class="' + cardClass + '" onclick="toggleMatchPlayers('' + matchId + '')" style="cursor:pointer;">' +
         '<div class="match-time">' + m.time + ' · ' + m.field + '</div>' +
         '<div class="match-teams">' + homeLabel + ' <span style="color:var(--muted);font-weight:400;">vs</span> ' + awayLabel + '</div>' +
         '<div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
           '<span class="match-agegroup">' + m.age + '</span>' +
           (badges ? '<div class="match-badges">' + badges + '</div>' : '') +
+          '<span style="margin-left:auto;font-size:11px;color:var(--muted);">' + matchPlayers.length + ' players ▾</span>' +
         '</div>' +
+        (matchPlayers.length ? buildMatchPlayerList(matchPlayers, matchId) : '') +
         '</div>';
     });
     html += '</div>';

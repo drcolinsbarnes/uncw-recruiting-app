@@ -2672,12 +2672,30 @@ function renderRatings(pid) {
     container.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No ratings yet.</div>';
     return;
   }
-  container.innerHTML = entries.map(function(r, idx){
-    return '<div class="rating-entry" style="position:relative;">' +
-      '<div class="re-top"><span class="re-coach">'+r.coach+'</span><span class="re-score">'+r.score+'</span></div>' +
-      '<div class="re-meta">'+r.event+' · '+r.half+'</div>' +
-      (r.note ? '<div class="re-note">'+r.note+'</div>' : '') +
-      '<button onclick="deleteRating(\''+pid+'\','+idx+')" style="position:absolute;top:8px;right:8px;background:#ef4444;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ Remove</button>' +
+  // Your ratings first (teal border), then other coaches (grey border)
+  var myName = currentCoach && currentCoach.name;
+  var mine   = entries.filter(function(r){ return r.coach === myName; });
+  var others = entries.filter(function(r){ return r.coach !== myName; });
+  var sorted = mine.concat(others);
+  container.innerHTML = sorted.map(function(r){
+    var isOwn = r.coach === myName;
+    var coachLabel = isOwn
+      ? '<span style="font-weight:700;color:var(--teal);font-size:12px;">You</span>'
+      : '<span style="font-weight:700;color:var(--navy);font-size:12px;">' + (r.coach||'Coach') + '</span>';
+    var scoreBg    = r.score >= 4.5 ? '#fef3c7' : r.score >= 3.5 ? '#dbeafe' : r.score >= 2.5 ? '#dcfce7' : '#f3f4f6';
+    var scoreColor = r.score >= 4.5 ? '#92400e' : r.score >= 3.5 ? '#1e40af' : r.score >= 2.5 ? '#166534' : '#374151';
+    var borderLeft = isOwn ? '3px solid var(--teal)' : '3px solid #e5e7eb';
+    var origIdx    = entries.indexOf(r);
+    var dateStr    = r.ts ? new Date(r.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    return '<div class="rating-entry" style="position:relative;border-left:' + borderLeft + ';padding-left:10px;margin-bottom:8px;">' +
+      '<div class="re-top" style="display:flex;align-items:center;gap:8px;">' +
+        coachLabel +
+        '<span style="background:' + scoreBg + ';color:' + scoreColor + ';font-weight:700;font-size:13px;padding:2px 8px;border-radius:8px;">' + r.score + '★</span>' +
+        (dateStr ? '<span style="color:var(--muted);font-size:10px;margin-left:auto;">' + dateStr + '</span>' : '') +
+        (isOwn ? '<button onclick="deleteRating(''+pid+'','+origIdx+')" style="background:none;color:#ef4444;border:1px solid #fca5a5;border-radius:6px;padding:1px 7px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px;">✕</button>' : '') +
+      '</div>' +
+      '<div class="re-meta" style="font-size:11px;color:var(--muted);margin-top:2px;">' + (r.event||'') + (r.half ? ' · ' + r.half : '') + '</div>' +
+      (r.note ? '<div class="re-note" style="font-size:12px;color:#374151;margin-top:4px;font-style:italic;">“' + r.note + '”</div>' : '') +
       '</div>';
   }).join('');
 }

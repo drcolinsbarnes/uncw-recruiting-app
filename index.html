@@ -154,9 +154,9 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
 .stars-row   { font-size: 24px; margin-top: 4px; }
 .detail-sl-btn { width: 100%; padding: 12px; border: none; border-radius: 10px;
                  font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
-.detail-rate-btn { width: 100%; padding: 12px; background: var(--teal); color: #fff;
-                   border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
-                   cursor: pointer; }
+.detail-rate-btn { width: 100%; padding: 16px; background: var(--teal); color: #fff;
+                   border: none; border-radius: 12px; font-size: 17px; font-weight: 700;
+                   cursor: pointer; touch-action: manipulation; letter-spacing: 0.03em; }
 .match-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .match-tab  { padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border);
               font-size: 12px; cursor: pointer; background: #fff; }
@@ -833,9 +833,9 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
       <label>Event</label>
       <select id="rEvent">
         <optgroup label="ECNL NC Showcase (May 30–June 1)">
-          <option>ECNL NC Showcase – May 30</option>
-          <option>ECNL NC Showcase – May 31</option>
-          <option>ECNL NC Showcase – June 1</option>
+          <option>ECNL NC Showcase – May 30 (Sat)</option>
+          <option>ECNL NC Showcase – May 31 (Sun)</option>
+          <option>ECNL NC Showcase – June 1 (Mon)</option>
         </optgroup>
         <optgroup label="Other Events">
           <option>GA Showcase – April</option>
@@ -939,7 +939,7 @@ var COACHES = [
   {name:'Yan',                 role:'Recruitment Analyst'}
 ];
 var SCHEDULE = [
-  {date:'May 30 (Fri) · Bryan Park Soccer Complex', matches:[
+  {date:'May 30 (Sat) · Bryan Park Soccer Complex', matches:[
     {time:'8:00 AM',  home:'HEX FC Bucks',                      away:'FC Stars White',                  field:'Field 05', age:'G2009'},
     {time:'8:00 AM',  home:'Michigan Hawks Magic',               away:'NCFC Youth',                      field:'Field 07', age:'G2010'},
     {time:'8:00 AM',  home:'Cleveland Force SC',                 away:'Beach FC (VA)',                    field:'Field 15', age:'G2009'},
@@ -1040,7 +1040,7 @@ var SCHEDULE = [
     {time:'4:15 PM',  home:'San Diego Surf',                     away:'Penn Fusion SA',                  field:'Field 18', age:'G2010'},
     {time:'4:15 PM',  home:'Arizona Arsenal',                    away:'SUSA FC',                         field:'Field 20', age:'G2010'}
   ]},
-  {date:'May 31 (Sat) · Bryan Park Soccer Complex', matches:[
+  {date:'May 31 (Sun) · Bryan Park Soccer Complex', matches:[
     {time:'8:00 AM',  home:'Albion Hurricanes FC',               away:'WNY Flash',                       field:'Field 03', age:'G2010'},
     {time:'8:00 AM',  home:'Florida Kraze Krush',                away:'NC Courage',                      field:'Field 05', age:'G2009'},
     {time:'8:00 AM',  home:'Bay Area Surf',                      away:'Michigan Hawks',                  field:'Field 07', age:'G2009'},
@@ -1142,7 +1142,7 @@ var SCHEDULE = [
     {time:'4:15 PM',  home:'Pipeline SC',                        away:'Beach FC (VA)',                    field:'Field 18', age:'G2009'},
     {time:'4:15 PM',  home:'HEX FC Bucks',                       away:'FSA FC',                          field:'Field 20', age:'G2009'}
   ]},
-  {date:'June 1 (Sun) · Bryan Park Soccer Complex', matches:[
+  {date:'June 1 (Mon) · Bryan Park Soccer Complex', matches:[
     {time:'8:00 AM',  home:'So Cal Blues',                       away:'Challenge SC',                    field:'Field 01', age:'G2010'},
     {time:'8:00 AM',  home:'Sting Austin',                       away:'SUSA FC',                         field:'Field 03', age:'G2011'},
     {time:'8:00 AM',  home:'VDA',                                away:'Michigan Hawks',                  field:'Field 05', age:'G2011'},
@@ -1395,19 +1395,29 @@ function initSupabase() {
   supa = supabase.createClient(SUPA_URL, SUPA_KEY);
   // Listen for auth state changes
   supa.auth.onAuthStateChange(function(event, session) {
-    if (session) {
-      currentCoach = {
-        id:   session.user.id,
-        name: session.user.user_metadata.name || session.user.email,
-        role: session.user.user_metadata.role || 'Scout',
-        email: session.user.email
-      };
-      currentCoachId = session.user.id;
-      hidLoginScreen();
-      loadAllDataFromSupabase();
-    } else {
+    // Only trigger a full reload on initial sign-in, not on token refresh or tab focus
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      if (session) {
+        currentCoach = {
+          id:   session.user.id,
+          name: session.user.user_metadata.name || session.user.email,
+          role: session.user.user_metadata.role || 'Scout',
+          email: session.user.email
+        };
+        currentCoachId = session.user.id;
+        hidLoginScreen();
+        // Only load data if not already loaded (prevents reload on tab switch)
+        if (!allPlayers || allPlayers.length === 0) {
+          loadAllDataFromSupabase();
+        } else {
+          document.getElementById('loadingOverlay').style.display = 'none';
+          document.getElementById('app').style.display = '';
+        }
+      }
+    } else if (event === 'SIGNED_OUT') {
       showLoginScreen();
     }
+    // TOKEN_REFRESHED and other events are intentionally ignored
   });
 }
 
@@ -3038,7 +3048,7 @@ function buildMatchPlayerList(players, matchId, homeClub, awayClub) {
       '</span>' +
       ratingBadge +
       '<button onclick="event.stopPropagation();currentPID=\'' + p.id + '\';openRatingForm();" ' +
-        'style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0;">+ Rate</button>' +
+        'style="background:var(--teal);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;min-width:60px;min-height:36px;touch-action:manipulation;">⭐ Rate</button>' +
       '</div>';
   }
 

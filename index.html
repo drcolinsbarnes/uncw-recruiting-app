@@ -1410,7 +1410,8 @@ function initSupabase() {
         _appLoaded = true;
         loadAllDataFromSupabase();
       }
-    } else if (event === 'SIGNED_OUT') {
+    } else {
+      // Covers SIGNED_OUT, INITIAL_SESSION with no session, TOKEN_REFRESH_FAILED, etc.
       _appLoaded = false;
       showLoginScreen();
     }
@@ -1493,21 +1494,45 @@ function loadAllDataFromSupabase() {
       currentCoach.name = coachRes.data.name;
       currentCoach.role = coachRes.data.role;
       currentCoachId    = coachRes.data.id;
+      updateCoachBadge();
+      document.getElementById('loadingMsg').textContent = 'Loading player data…';
+      // Step 3: Load all DB tables in parallel
+      return Promise.all([
+        supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
+        supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
+        supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
+        supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
+        supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
+        supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
+        supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
+        fetchAllAwards()
+      ]);
+    } else {
+      // Coach email not in coaches table — auto-create the record so ratings FK works
+      document.getElementById('loadingMsg').textContent = 'Creating coach profile…';
+      return supa.from('coaches').insert({
+        school_id: SCHOOL_ID,
+        name:      currentCoach.name,
+        email:     currentCoach.email,
+        role:      'scout'
+      }).select('id').single()
+      .then(function(ins) {
+        if (ins.data) { currentCoachId = ins.data.id; }
+        updateCoachBadge();
+        document.getElementById('loadingMsg').textContent = 'Loading player data…';
+        // Step 3: Load all DB tables in parallel
+        return Promise.all([
+          supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
+          supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
+          supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
+          supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
+          supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
+          supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
+          supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
+          fetchAllAwards()
+        ]);
+      });
     }
-    updateCoachBadge();
-    document.getElementById('loadingMsg').textContent = 'Loading player data…';
-
-    // Step 3: Load all DB tables in parallel
-    return Promise.all([
-      supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
-      supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
-      supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
-      supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
-      supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
-      supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
-      supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
-      fetchAllAwards()
-    ]);
   })
   .then(function(results) {
     var ratingsRows  = results[0].data || [];
@@ -3220,17 +3245,41 @@ function updateCoachBadge() {
 
 
 function exportCSV(){
-  var list = allPlayers.filter(function(p){ return ratingsDB[p.id] && ratingsDB[p.id].length; });
-  downloadCSV(list, 'uncw_ratings');
+  // One row per rating entry so coaches/notes/events are all visible
+  var header = ['Player ID','First','Last','Club','Grad Year','Position','Shortlisted','Coach','Event','Half','Stars','Notes','Date'];
+  var rows = [header];
+  allPlayers.forEach(function(p){
+    var entries = ratingsDB[p.id];
+    if (!entries || !entries.length) return;
+    var sl = shortlistDB.indexOf(p.id) >= 0 ? 'Yes' : 'No';
+    entries.forEach(function(e){
+      var date = e.ts ? new Date(e.ts).toISOString().slice(0,10) : '';
+      rows.push([p.id, p.first, p.last, p.club, p.grad_year, p.position, sl,
+                 e.coach||'', e.event||'', e.half||'', e.score||'', e.note||'', date]);
+    });
+  });
+  var csv = rows.map(function(r){
+    return r.map(function(c){ return '"'+(c||'').toString().replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'uncw_ratings_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
 }
 function downloadCSV(players, filename){
-  var rows = [['ID','First','Last','Club','Grad Year','Position','Avg Rating','Shortlisted','Ratings Count']];
+  var rows = [['ID','First','Last','Club','Grad Year','Position','Avg Rating','Shortlisted','Ratings Count','Notes']];
   players.forEach(function(p){
     var avg = getAvg(p.id);
-    var cnt = (ratingsDB[p.id]||[]).length;
-    rows.push([p.id, p.first, p.last, p.club, p.grad_year, p.position, avg, shortlistDB.indexOf(p.id)>=0?'Yes':'No', cnt]);
+    var entries = ratingsDB[p.id] || [];
+    var cnt = entries.length;
+    var notes = entries.map(function(e){ return e.note||''; }).filter(Boolean).join(' | ');
+    rows.push([p.id, p.first, p.last, p.club, p.grad_year, p.position, avg,
+               shortlistDB.indexOf(p.id)>=0?'Yes':'No', cnt, notes]);
   });
-  var csv = rows.map(function(r){return r.map(function(c){return '"'+(c||'').toString().replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var csv = rows.map(function(r){
+    return r.map(function(c){ return '"'+(c||'').toString().replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
   var blob = new Blob([csv], {type:'text/csv'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

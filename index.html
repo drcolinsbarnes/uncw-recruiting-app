@@ -3379,13 +3379,17 @@ function buildCampCard(entry, p) {
   var avg    = getAvg(p.id);
   var rClass = avg >= 4.5 ? 'rating-5' : avg >= 3.5 ? 'rating-4' : avg >= 2.5 ? 'rating-3' : avg >= 1.5 ? 'rating-2' : avg > 0 ? 'rating-1' : 'rating-0';
   var rLabel = avg > 0 ? avg.toFixed(1) : 'Unrated';
+  var isECNL = p.id && p.id.indexOf('CL-') === 0;
   var dayBadge = entry.camp_day
     ? '<span class="tag" style="background:var(--teal);color:#fff;">' + entry.camp_day + '</span>'
     : '';
+  var ecnlBadge = isECNL
+    ? '<span class="tag" style="background:var(--navy);color:var(--gold);font-weight:700;">⚡ ECNL</span>'
+    : '';
   var awards = getAwardTagsDetailed(p);
-  return '<div class="player-card" onclick="cardClick(\'' + p.id + '\')" data-pid="' + p.id + '">' +
+  return '<div class="player-card' + (isECNL ? ' ynt-player' : '') + '" onclick="cardClick(\'' + p.id + '\')" data-pid="' + p.id + '">' +
     '<div class="card-top" style="flex:1;display:flex;align-items:flex-start;gap:10px;">' +
-    '<div class="card-jersey" style="background:var(--teal);">' + (entry.camp_jersey || '#') + '</div>' +
+    '<div class="card-jersey" style="background:' + (isECNL ? 'var(--navy)' : 'var(--teal)') + ';color:' + (isECNL ? 'var(--gold)' : '#fff') + ';">' + (entry.camp_jersey || '#') + '</div>' +
     '<div class="card-info">' +
     '<div class="card-name">' + (p.first||'') + ' ' + (p.last||'') + '</div>' +
     '<div class="card-sub">' + (p.club||'') + ' · ' + (p.position||'') + ' · ' + (p.grad_year||'') + '</div>' +
@@ -3393,7 +3397,7 @@ function buildCampCard(entry, p) {
     '<div class="card-right">' +
     '<span class="rating-badge ' + rClass + '">' + rLabel + '</span>' +
     '</div></div>' +
-    ((awards || dayBadge) ? '<div class="card-tags">' + dayBadge + awards + '</div>' : '') +
+    ((awards || dayBadge || ecnlBadge) ? '<div class="card-tags">' + ecnlBadge + dayBadge + awards + '</div>' : '') +
     '</div>';
 }
 

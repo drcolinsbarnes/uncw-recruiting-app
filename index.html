@@ -2280,7 +2280,7 @@ function saveEditPlayer() {
     // Update manual_players table
     supa.from('manual_players').update({
       first: p.first, last: p.last, jersey: p.jersey, position: p.position,
-      club: p.club, grad_year: parseInt(p.grad_year)||null, age_group: p.age_group,
+      club: p.club, conference: p.conference, grad_year: parseInt(p.grad_year)||null, age_group: p.age_group,
       email: p.email, cell: p.cell
     }).eq('id', currentPID)
     .then(function(r) {
@@ -2289,7 +2289,7 @@ function saveEditPlayer() {
     });
   } else {
     // Save as player_override rows (one per changed field)
-    var fields = ['first','last','jersey','position','club','grad_year','age_group','email','cell'];
+    var fields = ['first','last','jersey','position','club','conference','grad_year','age_group','email','cell'];
     var upserts = fields.map(function(f) {
       return { school_id: SCHOOL_ID, player_id: currentPID, field_name: f,
                value: String(p[f]||''), set_by: currentCoachId };
@@ -3602,7 +3602,13 @@ function buildCampCard(entry, p) {
   var avg    = getAvg(p.id);
   var rClass = avg >= 4.5 ? 'rating-5' : avg >= 3.5 ? 'rating-4' : avg >= 2.5 ? 'rating-3' : avg >= 1.5 ? 'rating-2' : avg > 0 ? 'rating-1' : 'rating-0';
   var rLabel = avg > 0 ? avg.toFixed(1) : 'Unrated';
-  var isECNL = p.id && p.id.indexOf('CL-') === 0;
+  // ECNL status: scouted players use CL- IDs; camp/manual entries (CAMP-) can
+  // also be ECNL athletes if they've been linked to a scouted record
+  // (matched_ecnl_id) or carry ECNL conference/club data directly.
+  var isECNL = (p.id && p.id.indexOf('CL-') === 0)
+    || !!p.matched_ecnl_id
+    || (p.conference && p.conference.toUpperCase().indexOf('ECNL') >= 0)
+    || (p.club && ECNL_CLUB_CONFERENCE.hasOwnProperty(p.club));
   var dayBadge = entry.camp_day
     ? '<span class="tag" style="background:var(--teal);color:#fff;">' + entry.camp_day + '</span>'
     : '';

@@ -3592,17 +3592,9 @@ function applyCampFilters() {
     return true;
   });
 
-  // Sort by grad year first, then bubble ECNL players to the top within each
-  // grad year, then by camp_jersey ascending (lowest numbers first)
+  // Show campers in plain jersey-number order (1–45); ECNL status is still
+  // called out via the badge on each card, but the list order stays numeric.
   filtered.sort(function(a, b) {
-    var pa = allPlayers.filter(function(x){ return x.id === a.player_id; })[0];
-    var pb = allPlayers.filter(function(x){ return x.id === b.player_id; })[0];
-    var gya = (pa && pa.grad_year) || 0;
-    var gyb = (pb && pb.grad_year) || 0;
-    if (gya !== gyb) return gya - gyb;
-    var ea = isCamperECNL(pa) ? 0 : 1;
-    var eb = isCamperECNL(pb) ? 0 : 1;
-    if (ea !== eb) return ea - eb;
     return (a.camp_jersey||0) - (b.camp_jersey||0);
   });
 

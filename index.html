@@ -3548,6 +3548,18 @@ function populateCampClubFilter() {
   sel.value = cur;
 }
 
+// ECNL status: scouted players use CL- IDs; camp/manual entries (CAMP-) can
+// also be ECNL athletes if they've been linked to a scouted record
+// (matched_ecnl_id) or carry ECNL conference/club data directly.
+function isCamperECNL(p) {
+  return !!(p && (
+    (p.id && p.id.indexOf('CL-') === 0)
+    || p.matched_ecnl_id
+    || (p.conference && p.conference.toUpperCase().indexOf('ECNL') >= 0)
+    || (p.club && ECNL_CLUB_CONFERENCE.hasOwnProperty(p.club))
+  ));
+}
+
 function applyCampFilters() {
   currentListContext = 'Camp';
   var club   = (document.getElementById('cpClub')   ||{}).value||'';
@@ -3580,6 +3592,16 @@ function applyCampFilters() {
     return true;
   });
 
+  // Bubble ECNL players to the top of the list, then by camp_jersey
+  filtered.sort(function(a, b) {
+    var pa = allPlayers.filter(function(x){ return x.id === a.player_id; })[0];
+    var pb = allPlayers.filter(function(x){ return x.id === b.player_id; })[0];
+    var ea = isCamperECNL(pa) ? 0 : 1;
+    var eb = isCamperECNL(pb) ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    return (a.camp_jersey||0) - (b.camp_jersey||0);
+  });
+
   var count = document.getElementById('campCount');
   if (count) count.textContent = filtered.length + ' camper' + (filtered.length !== 1 ? 's' : '');
 
@@ -3605,10 +3627,7 @@ function buildCampCard(entry, p) {
   // ECNL status: scouted players use CL- IDs; camp/manual entries (CAMP-) can
   // also be ECNL athletes if they've been linked to a scouted record
   // (matched_ecnl_id) or carry ECNL conference/club data directly.
-  var isECNL = (p.id && p.id.indexOf('CL-') === 0)
-    || !!p.matched_ecnl_id
-    || (p.conference && p.conference.toUpperCase().indexOf('ECNL') >= 0)
-    || (p.club && ECNL_CLUB_CONFERENCE.hasOwnProperty(p.club));
+  var isECNL = isCamperECNL(p);
   var dayBadge = entry.camp_day
     ? '<span class="tag" style="background:var(--teal);color:#fff;">' + entry.camp_day + '</span>'
     : '';

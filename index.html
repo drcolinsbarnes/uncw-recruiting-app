@@ -2751,17 +2751,30 @@ function openDetail(pid, from) {
   // Contact info
   var contactCard = document.getElementById('detailContactCard');
   var contactGrid = document.getElementById('detailContactGrid');
-  var contactFields = [];
-  if(p.email) contactFields.push(['Player Email', '<a class="contact-link" href="mailto:'+p.email+'">'+p.email+'</a>']);
-  if(p.cell)  contactFields.push(['Player Cell',  '<a class="contact-link" href="tel:'+p.cell+'">'+p.cell+'</a>']);
-  if(p.coach_name)  contactFields.push(['Coach', p.coach_name]);
-  if(p.coach_email) contactFields.push(['Coach Email', '<a class="contact-link" href="mailto:'+p.coach_email+'">'+p.coach_email+'</a>']);
-  if(p.coach_cell)  contactFields.push(['Coach Cell',  '<a class="contact-link" href="tel:'+p.coach_cell+'">'+p.coach_cell+'</a>']);
-  if(contactFields.length) {
-    contactCard.style.display = '';
-    contactGrid.innerHTML = contactFields.map(function(f){
+  var playerFields = [];
+  var coachFields = [];
+  if(p.email) playerFields.push(['Email', '<a class="contact-link" href="mailto:'+p.email+'">'+p.email+'</a>']);
+  if(p.cell)  playerFields.push(['Cell',  '<a class="contact-link" href="tel:'+p.cell+'">'+p.cell+'</a>']);
+  if(p.coach_name)  coachFields.push(['Name', p.coach_name]);
+  if(p.coach_email) coachFields.push(['Email', '<a class="contact-link" href="mailto:'+p.coach_email+'">'+p.coach_email+'</a>']);
+  if(p.coach_cell)  coachFields.push(['Cell',  '<a class="contact-link" href="tel:'+p.coach_cell+'">'+p.coach_cell+'</a>']);
+
+  function renderContactGroup(title, fields){
+    if(!fields.length) return '';
+    var html = '<div class="contact-group"><h4 style="margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">'+title+'</h4><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
+    html += fields.map(function(f){
       return '<div class="template-field"><label>'+f[0]+'</label><div class="tf-value">'+f[1]+'</div></div>';
     }).join('');
+    html += '</div></div>';
+    return html;
+  }
+
+  if(playerFields.length || coachFields.length) {
+    contactCard.style.display = '';
+    contactGrid.innerHTML = '<div style="display:flex;flex-direction:column;gap:16px;">'
+      + renderContactGroup('Player', playerFields)
+      + renderContactGroup('Coach', coachFields)
+      + '</div>';
   } else {
     contactCard.style.display = '';
     contactGrid.innerHTML = '<p style="color:var(--muted);font-size:13px;font-style:italic;">No contact info on file. Add via team profile import.</p>';

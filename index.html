@@ -842,8 +842,19 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
       </select>
     </div>
     <div class="form-group">
-      <label>Club / School</label>
-      <input type="text" id="editClub" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
+      <label>Team Type</label>
+      <select id="editClubType" onchange="toggleClubInput()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
+        <option value="ECNL">ECNL</option>
+        <option value="Other">Non-ECNL / Other</option>
+      </select>
+    </div>
+    <div class="form-group" id="editClubEcnlGroup">
+      <label>ECNL Club</label>
+      <select id="editClubEcnl" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;"></select>
+    </div>
+    <div class="form-group" id="editClubOtherGroup" style="display:none;">
+      <label>Club / School Name</label>
+      <input type="text" id="editClubOther" placeholder="Type the club or school name" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
     </div>
     <div class="form-group">
       <label>Grad Year</label>
@@ -2241,7 +2252,18 @@ function saveEditPlayer() {
   p.last      = document.getElementById('editLast').value.trim()     || p.last;
   p.jersey    = document.getElementById('editJersey').value.trim();
   p.position  = document.getElementById('editPosition').value        || p.position;
-  p.club      = document.getElementById('editClub').value.trim()     || p.club;
+  var clubType = document.getElementById('editClubType').value;
+  if (clubType === 'ECNL') {
+    var ecnlClub = document.getElementById('editClubEcnl').value;
+    if (ecnlClub) {
+      p.club = ecnlClub;
+      p.conference = ECNL_CLUB_CONFERENCE[ecnlClub] || p.conference;
+    }
+  } else {
+    var otherClub = document.getElementById('editClubOther').value.trim();
+    if (otherClub) p.club = otherClub;
+    p.conference = '';
+  }
   var gy = document.getElementById('editGradYear').value;
   if (gy) p.grad_year = parseInt(gy);
   p.age_group = document.getElementById('editAgeGroup').value        || p.age_group;
@@ -2404,6 +2426,154 @@ function updateDetailCommitRow(p, val) {
     slBtn.style.background = 'var(--teal)';
   }
 }
+
+// ── ECNL club → conference lookup (derived from existing roster data) ──
+// Used to populate the "ECNL Club" dropdown on the Edit Player form and to
+// auto-set the player's conference when an ECNL club is selected.
+var ECNL_CLUB_CONFERENCE = {
+  "Arlington Soccer": "ECNL Girls Mid-Atlantic",
+  "Beach FC (VA)": "ECNL Girls Mid-Atlantic",
+  "Charlotte Independence": "ECNL Girls Mid-Atlantic",
+  "Charlotte SA": "ECNL Girls Mid-Atlantic",
+  "Fairfax VA Union": "ECNL Girls Mid-Atlantic",
+  "Fairfax Virginia Union": "ECNL Girls Mid-Atlantic",
+  "NC Courage": "ECNL Girls Mid-Atlantic",
+  "NC Fusion": "ECNL Girls Mid-Atlantic",
+  "NCFC Youth": "ECNL Girls Mid-Atlantic",
+  "NVA": "ECNL Girls Mid-Atlantic",
+  "Richmond United": "ECNL Girls Mid-Atlantic",
+  "VDA": "ECNL Girls Mid-Atlantic",
+  "Wilmington Hammerheads": "ECNL Girls Mid-Atlantic",
+  "Chicago Inter Soccer": "ECNL Girls Midwest",
+  "Eclipse Select SC": "ECNL Girls Midwest",
+  "FC Wisconsin": "ECNL Girls Midwest",
+  "Gretna Elite Academy": "ECNL Girls Midwest",
+  "Kansas City Athletics": "ECNL Girls Midwest",
+  "Liverpool FC IA Michigan": "ECNL Girls Midwest",
+  "Michigan Hawks": "ECNL Girls Midwest",
+  "Michigan Hawks Magic": "ECNL Girls Midwest",
+  "Midwest United FC": "ECNL Girls Midwest",
+  "Minnesota Thunder": "ECNL Girls Midwest",
+  "Missouri Rush": "ECNL Girls Midwest",
+  "Nationals SC": "ECNL Girls Midwest",
+  "Nationals Soccer Club": "ECNL Girls Midwest",
+  "Rockford Raptors": "ECNL Girls Midwest",
+  "SLSG Green": "ECNL Girls Midwest",
+  "SLSG Navy": "ECNL Girls Midwest",
+  "Sporting Blue Valley": "ECNL Girls Midwest",
+  "Sporting Iowa": "ECNL Girls Midwest",
+  "Connecticut FC": "ECNL Girls New England",
+  "Connecticut FC United": "ECNL Girls New England",
+  "East Meadow SC": "ECNL Girls New England",
+  "FC Stars Blue": "ECNL Girls New England",
+  "FC Stars White": "ECNL Girls New England",
+  "FSA FC": "ECNL Girls New England",
+  "SUSA FC": "ECNL Girls New England",
+  "Scorpions SC": "ECNL Girls New England",
+  "South Shore Select": "ECNL Girls New England",
+  "World Class FC": "ECNL Girls New England",
+  "Bethesda SC": "ECNL Girls North Atlantic",
+  "FC DELCO": "ECNL Girls North Atlantic",
+  "HEX FC Bucks": "ECNL Girls North Atlantic",
+  "Maryland United FC": "ECNL Girls North Atlantic",
+  "Match Fit Academy": "ECNL Girls North Atlantic",
+  "Match Fit Surf": "ECNL Girls North Atlantic",
+  "PDA Blue": "ECNL Girls North Atlantic",
+  "PDA South": "ECNL Girls North Atlantic",
+  "PDA White": "ECNL Girls North Atlantic",
+  "Penn Fusion SA": "ECNL Girls North Atlantic",
+  "Philadelphia Ukrainian Nationals": "ECNL Girls North Atlantic",
+  "Pipeline SC": "ECNL Girls North Atlantic",
+  "Bay Area Surf": "ECNL Girls Northern Cal",
+  "COSC": "ECNL Girls Northern Cal",
+  "Davis Legacy": "ECNL Girls Northern Cal",
+  "De Anza Force": "ECNL Girls Northern Cal",
+  "MVLA": "ECNL Girls Northern Cal",
+  "Marin FC": "ECNL Girls Northern Cal",
+  "Mustang SC": "ECNL Girls Northern Cal",
+  "Placer United": "ECNL Girls Northern Cal",
+  "Pleasanton RAGE": "ECNL Girls Northern Cal",
+  "San Juan SC": "ECNL Girls Northern Cal",
+  "Santa Rosa United": "ECNL Girls Northern Cal",
+  "Boise Thorns FC": "ECNL Girls Northwest",
+  "Eastside FC": "ECNL Girls Northwest",
+  "La Roca FC": "ECNL Girls Northwest",
+  "Oregon Surf": "ECNL Girls Northwest",
+  "PacNW SC": "ECNL Girls Northwest",
+  "Portland Thorns": "ECNL Girls Northwest",
+  "Seattle United": "ECNL Girls Northwest",
+  "Utah Avalanche": "ECNL Girls Northwest",
+  "Washington Premier": "ECNL Girls Northwest",
+  "XF Academy": "ECNL Girls Northwest",
+  "Cleveland Force SC": "ECNL Girls Ohio Valley",
+  "FC Alliance": "ECNL Girls Ohio Valley",
+  "FC Pride Elite": "ECNL Girls Ohio Valley",
+  "Indy Eleven Pro Academy": "ECNL Girls Ohio Valley",
+  "Internationals SC": "ECNL Girls Ohio Valley",
+  "Kings Hammer SC": "ECNL Girls Ohio Valley",
+  "Ohio Elite Soccer Academy": "ECNL Girls Ohio Valley",
+  "Ohio Premier": "ECNL Girls Ohio Valley",
+  "Pittsburgh Riverhounds": "ECNL Girls Ohio Valley",
+  "Racing Louisville Academy": "ECNL Girls Ohio Valley",
+  "Tennessee SC": "ECNL Girls Ohio Valley",
+  "WNY Flash": "ECNL Girls Ohio Valley",
+  "Alabama FC": "ECNL Girls Southeast",
+  "Atlanta Fire United": "ECNL Girls Southeast",
+  "CESA Liberty": "ECNL Girls Southeast",
+  "Concorde Fire Platinum": "ECNL Girls Southeast",
+  "Concorde Fire Premier": "ECNL Girls Southeast",
+  "FC Prime": "ECNL Girls Southeast",
+  "FL Premier FC": "ECNL Girls Southeast",
+  "Florida Elite": "ECNL Girls Southeast",
+  "Florida Krush": "ECNL Girls Southeast",
+  "Florida West FC": "ECNL Girls Southeast",
+  "GSA": "ECNL Girls Southeast",
+  "Jacksonville FC": "ECNL Girls Southeast",
+  "Orlando City": "ECNL Girls Southeast",
+  "Orlando Pride": "ECNL Girls Southeast",
+  "South Carolina United": "ECNL Girls Southeast",
+  "Sporting Jax": "ECNL Girls Southeast",
+  "Tampa Bay United": "ECNL Girls Southeast",
+  "United Futbol Academy": "ECNL Girls Southeast",
+  "Arizona Arsenal": "ECNL Girls Southwest",
+  "Beach FC": "ECNL Girls Southwest",
+  "Beach FC (CA)": "ECNL Girls Southwest",
+  "Eagles SC": "ECNL Girls Southwest",
+  "LA Breakers FC": "ECNL Girls Southwest",
+  "LAFC So Cal": "ECNL Girls Southwest",
+  "LV Heat Surf": "ECNL Girls Southwest",
+  "Legends FC": "ECNL Girls Southwest",
+  "Legends FC San Diego": "ECNL Girls Southwest",
+  "Pateadores": "ECNL Girls Southwest",
+  "Phoenix Rising": "ECNL Girls Southwest",
+  "Rebels SC": "ECNL Girls Southwest",
+  "SLAMMERS FC": "ECNL Girls Southwest",
+  "San Diego Surf": "ECNL Girls Southwest",
+  "Slammers FC HB Koge": "ECNL Girls Southwest",
+  "So Cal Blues": "ECNL Girls Southwest",
+  "Sporting CA USA": "ECNL Girls Southwest",
+  "Sporting California USA": "ECNL Girls Southwest",
+  "Utah Royals FC-AZ": "ECNL Girls Southwest",
+  "Albion Hurricanes FC": "ECNL Girls Texas",
+  "Challenge SC": "ECNL Girls Texas",
+  "Classics Elite": "ECNL Girls Texas",
+  "Colorado Rapids": "ECNL Girls Texas",
+  "Colorado Rush": "ECNL Girls Texas",
+  "Colorado Rush Academy Blue": "ECNL Girls Texas",
+  "DKSC": "ECNL Girls Texas",
+  "Dallas Texans": "ECNL Girls Texas",
+  "FC Dallas": "ECNL Girls Texas",
+  "OK Energy FC": "ECNL Girls Texas",
+  "Real Colorado Athletico": "ECNL Girls Texas",
+  "Real Colorado National": "ECNL Girls Texas",
+  "SOLAR SC": "ECNL Girls Texas",
+  "Solar SC": "ECNL Girls Texas",
+  "Sting Austin": "ECNL Girls Texas",
+  "Sting Black": "ECNL Girls Texas",
+  "Sting Royal": "ECNL Girls Texas",
+  "Tulsa SC": "ECNL Girls Texas",
+  "West Side Alliance": "ECNL Girls Texas"
+};
 
 // ── STATE ──
 var allPlayers = [];
@@ -3683,7 +3853,12 @@ function openEditPlayer() {
   document.getElementById('editLast').value     = p.last     || '';
   document.getElementById('editJersey').value   = p.jersey   || '';
   document.getElementById('editPosition').value = p.position || '';
-  document.getElementById('editClub').value     = p.club     || '';
+  populateEcnlClubSelect();
+  var isKnownEcnl = p.club && ECNL_CLUB_CONFERENCE.hasOwnProperty(p.club);
+  document.getElementById('editClubType').value = isKnownEcnl ? 'ECNL' : 'Other';
+  document.getElementById('editClubEcnl').value = isKnownEcnl ? p.club : '';
+  document.getElementById('editClubOther').value = isKnownEcnl ? '' : (p.club || '');
+  toggleClubInput();
   document.getElementById('editGradYear').value = p.grad_year ? String(p.grad_year) : '';
   document.getElementById('editAgeGroup').value = p.age_group|| '';
   document.getElementById('editEmail').value    = p.email    || '';
@@ -3692,6 +3867,29 @@ function openEditPlayer() {
 }
 function closeEditPlayer() {
   document.getElementById('editPlayerModal').classList.remove('open');
+}
+function populateEcnlClubSelect() {
+  var sel = document.getElementById('editClubEcnl');
+  if (sel.options.length) return; // already populated
+  var byConf = {};
+  Object.keys(ECNL_CLUB_CONFERENCE).forEach(function(club){
+    var conf = ECNL_CLUB_CONFERENCE[club];
+    (byConf[conf] = byConf[conf] || []).push(club);
+  });
+  var html = '<option value="">— Select ECNL Club —</option>';
+  Object.keys(byConf).sort().forEach(function(conf){
+    html += '<optgroup label="'+conf+'">';
+    byConf[conf].sort().forEach(function(club){
+      html += '<option value="'+club+'">'+club+'</option>';
+    });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+}
+function toggleClubInput() {
+  var type = document.getElementById('editClubType').value;
+  document.getElementById('editClubEcnlGroup').style.display  = (type === 'ECNL') ? '' : 'none';
+  document.getElementById('editClubOtherGroup').style.display = (type === 'ECNL') ? 'none' : '';
 }
 
 // ── ADD PLAYER ──

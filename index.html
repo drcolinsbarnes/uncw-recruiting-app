@@ -2433,7 +2433,6 @@ function updateDetailCommitRow(p, val) {
 var ECNL_CLUB_CONFERENCE = {
   "Arlington Soccer": "ECNL Girls Mid-Atlantic",
   "Beach FC (VA)": "ECNL Girls Mid-Atlantic",
-  "Charlotte Independence": "ECNL Girls Mid-Atlantic",
   "Charlotte SA": "ECNL Girls Mid-Atlantic",
   "Fairfax VA Union": "ECNL Girls Mid-Atlantic",
   "Fairfax Virginia Union": "ECNL Girls Mid-Atlantic",
@@ -3551,7 +3550,18 @@ function populateCampClubFilter() {
 // ECNL status: scouted players use CL- IDs; camp/manual entries (CAMP-) can
 // also be ECNL athletes if they've been linked to a scouted record
 // (matched_ecnl_id) or carry ECNL conference/club data directly.
+// Manual exclusions: players who play for a club with an ECNL program but are
+// not themselves ECNL-rostered (club-based detection would otherwise mis-tag
+// them). Set a player's id to false here to suppress the "⚡ ECNL" badge
+// regardless of club/conference matches.
+var ECNL_STATUS_OVERRIDES = {
+  'CAMP-001003': false  // Kherington Stanford — plays for Cleveland Force SC but is not an ECNL player
+};
+
 function isCamperECNL(p) {
+  if (p && p.id && ECNL_STATUS_OVERRIDES.hasOwnProperty(p.id)) {
+    return !!ECNL_STATUS_OVERRIDES[p.id];
+  }
   return !!(p && (
     (p.id && p.id.indexOf('CL-') === 0)
     || p.matched_ecnl_id

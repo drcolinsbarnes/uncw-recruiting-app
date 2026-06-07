@@ -3592,10 +3592,14 @@ function applyCampFilters() {
     return true;
   });
 
-  // Bubble ECNL players to the top of the list, then by camp_jersey
+  // Sort by grad year first, then bubble ECNL players to the top within each
+  // grad year, then by camp_jersey ascending (lowest numbers first)
   filtered.sort(function(a, b) {
     var pa = allPlayers.filter(function(x){ return x.id === a.player_id; })[0];
     var pb = allPlayers.filter(function(x){ return x.id === b.player_id; })[0];
+    var gya = (pa && pa.grad_year) || 0;
+    var gyb = (pb && pb.grad_year) || 0;
+    if (gya !== gyb) return gya - gyb;
     var ea = isCamperECNL(pa) ? 0 : 1;
     var eb = isCamperECNL(pb) ? 0 : 1;
     if (ea !== eb) return ea - eb;

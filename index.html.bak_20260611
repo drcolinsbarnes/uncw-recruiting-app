@@ -284,7 +284,7 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
 .interest-badge { font-size: 10px; padding: 2px 6px; border-radius: 6px;
                   background: #fff7ed; color: #c2410c; font-weight: 700; }
 
-.contact-link { color: var(--teal); text-decoration: none; font-weight: 500; font-size: 13px; overflow-wrap: anywhere; word-break: break-word; }
+.contact-link { color: var(--teal); text-decoration: none; font-weight: 600; }
 .star-visual { display: flex; gap: 1px; align-items: center; }
 .star-vis-full  { color: #f59e0b; font-size: 22px; line-height:1; }
 .star-vis-half  { position: relative; display: inline-block; font-size: 22px; line-height:1; }
@@ -794,19 +794,6 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
       <label>Cell</label>
       <input type="text" id="addCell" placeholder="555-867-5309" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
     </div>
-    <p style="margin:14px 0 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Club Coach Contact (optional)</p>
-    <div class="form-group">
-      <label>Coach Name</label>
-      <input type="text" id="addCoachName" placeholder="Club coach name" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
-    <div class="form-group">
-      <label>Coach Email</label>
-      <input type="text" id="addCoachEmail" placeholder="coach@club.org" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
-    <div class="form-group">
-      <label>Coach Cell</label>
-      <input type="text" id="addCoachCell" placeholder="555-867-5309" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
     <div class="form-group">
       <label>Interest Level</label>
       <select id="addInterest" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
@@ -898,19 +885,6 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
     <div class="form-group">
       <label>Cell</label>
       <input type="text" id="editCell" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
-    <p style="margin:14px 0 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Club Coach Contact</p>
-    <div class="form-group">
-      <label>Coach Name</label>
-      <input type="text" id="editCoachName" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
-    <div class="form-group">
-      <label>Coach Email</label>
-      <input type="text" id="editCoachEmail" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
-    </div>
-    <div class="form-group">
-      <label>Coach Cell</label>
-      <input type="text" id="editCoachCell" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);font-family:inherit;">
     </div>
     <div class="modal-actions">
       <button style="background:var(--border);color:var(--text);font-family:inherit;" onclick="closeEditPlayer()">Cancel</button>
@@ -1705,7 +1679,6 @@ function loadAllDataFromSupabase() {
         club: r.club, conference: r.conference,
         grad_year: r.grad_year, age_group: r.age_group,
         email: r.email, cell: r.cell,
-        coach_name: r.coach_name || '', coach_email: r.coach_email || '', coach_cell: r.coach_cell || '',
         is_camper: r.source === 'camp' || r.source === 'ecnl_camper',
         source: r.source,
         committed: '',
@@ -2296,23 +2269,19 @@ function saveEditPlayer() {
   p.age_group = document.getElementById('editAgeGroup').value        || p.age_group;
   p.email     = document.getElementById('editEmail').value.trim();
   p.cell      = document.getElementById('editCell').value.trim();
-  p.coach_name  = document.getElementById('editCoachName').value.trim();
-  p.coach_email = document.getElementById('editCoachEmail').value.trim();
-  p.coach_cell  = document.getElementById('editCoachCell').value.trim();
 
   closeEditPlayer();
   openDetail(currentPID, currentListContext);
   applyFilters();
   setSyncing();
 
-  var isCamp = currentPID.indexOf('CAMP-') === 0 || currentPID.indexOf('SHOW-') === 0;
+  var isCamp = currentPID.indexOf('CAMP-') === 0;
   if (isCamp) {
     // Update manual_players table
     supa.from('manual_players').update({
       first: p.first, last: p.last, jersey: p.jersey, position: p.position,
       club: p.club, conference: p.conference, grad_year: parseInt(p.grad_year)||null, age_group: p.age_group,
-      email: p.email, cell: p.cell,
-      coach_name: p.coach_name || null, coach_email: p.coach_email || null, coach_cell: p.coach_cell || null
+      email: p.email, cell: p.cell
     }).eq('id', currentPID)
     .then(function(r) {
       if (r.error) setSyncStatus('Edit error: ' + r.error.message, true);
@@ -2320,7 +2289,7 @@ function saveEditPlayer() {
     });
   } else {
     // Save as player_override rows (one per changed field)
-    var fields = ['first','last','jersey','position','club','conference','grad_year','age_group','email','cell','coach_name','coach_email','coach_cell'];
+    var fields = ['first','last','jersey','position','club','conference','grad_year','age_group','email','cell'];
     var upserts = fields.map(function(f) {
       return { school_id: SCHOOL_ID, player_id: currentPID, field_name: f,
                value: String(p[f]||''), set_by: currentCoachId };
@@ -2344,9 +2313,6 @@ function submitAddPlayer() {
   var email = document.getElementById('addEmail').value.trim();
   var cell  = document.getElementById('addCell').value.trim();
   var jersey= document.getElementById('addJersey').value.trim();
-  var coachName  = document.getElementById('addCoachName').value.trim();
-  var coachEmail = document.getElementById('addCoachEmail').value.trim();
-  var coachCell  = document.getElementById('addCoachCell').value.trim();
   var il    = document.getElementById('addInterest').value;
 
   // Generate next CAMP- ID from existing count
@@ -2377,7 +2343,6 @@ function submitAddPlayer() {
     first: first, last: last, jersey: jersey, position: pos,
     club: club||'(Added)', grad_year: parseInt(grad)||null,
     email: email, cell: cell,
-    coach_name: coachName || null, coach_email: coachEmail || null, coach_cell: coachCell || null,
     source: il==='camper' ? 'camp' : 'manual',
     added_by: currentCoachId
   };
@@ -2965,9 +2930,9 @@ function openDetail(pid, from) {
 
   function renderContactGroup(title, fields){
     if(!fields.length) return '';
-    var html = '<div class="contact-group"><h4 style="margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">'+title+'</h4><div style="display:grid;grid-template-columns:1fr;gap:10px;">';
+    var html = '<div class="contact-group"><h4 style="margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">'+title+'</h4><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
     html += fields.map(function(f){
-      return '<div class="template-field" style="min-width:0;"><label>'+f[0]+'</label><div class="tf-value" style="font-size:13px;overflow-wrap:anywhere;word-break:break-word;">'+f[1]+'</div></div>';
+      return '<div class="template-field"><label>'+f[0]+'</label><div class="tf-value">'+f[1]+'</div></div>';
     }).join('');
     html += '</div></div>';
     return html;
@@ -3929,9 +3894,6 @@ function openEditPlayer() {
   document.getElementById('editAgeGroup').value = p.age_group|| '';
   document.getElementById('editEmail').value    = p.email    || '';
   document.getElementById('editCell').value     = p.cell     || '';
-  document.getElementById('editCoachName').value  = p.coach_name  || '';
-  document.getElementById('editCoachEmail').value = p.coach_email || '';
-  document.getElementById('editCoachCell').value  = p.coach_cell  || '';
   document.getElementById('editPlayerModal').classList.add('open');
 }
 function closeEditPlayer() {

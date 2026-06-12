@@ -1585,6 +1585,29 @@ function fetchAllAwards() {
   });
 }
 
+// Generic pager — Supabase caps responses at 1000 rows; tables that can grow
+// past that (manual_players, ratings, player_overrides) must be fetched in pages.
+function fetchAllPaged(table, columns, orderCols) {
+  var PAGE = 1000;
+  var allRows = [];
+  function fetchPage(from) {
+    var q = supa.from(table).select(columns).eq('school_id', SCHOOL_ID);
+    (orderCols || ['id']).forEach(function(c) { q = q.order(c, { ascending: true }); });
+    return q.range(from, from + PAGE - 1)
+      .then(function(r) {
+        if (r.error) return allRows;
+        allRows = allRows.concat(r.data || []);
+        if ((r.data || []).length === PAGE) {
+          return fetchPage(from + PAGE);  // more pages
+        }
+        return allRows;
+      });
+  }
+  return fetchPage(0).then(function(rows) {
+    return { data: rows, error: null };
+  });
+}
+
 // ── LOAD ALL DATA FROM SUPABASE ──────────────────────────────────────────
 function loadAllDataFromSupabase() {
   document.getElementById('loadingOverlay').style.display = 'flex';
@@ -1610,13 +1633,13 @@ function loadAllDataFromSupabase() {
       document.getElementById('loadingMsg').textContent = 'Loading player data…';
       // Step 3: Load all DB tables in parallel
       return Promise.all([
-        supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
+        fetchAllPaged('ratings', '*'),
         supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
         supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
         supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
         supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
-        supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
-        supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
+        fetchAllPaged('manual_players', '*'),
+        fetchAllPaged('player_overrides', 'player_id,field_name,value', ['player_id','field_name']),
         fetchAllAwards(),
         supa.from('camp_roster').select('player_id,camp_jersey,camp_day').eq('school_id', SCHOOL_ID).order('camp_jersey')
       ]);
@@ -1635,13 +1658,13 @@ function loadAllDataFromSupabase() {
         document.getElementById('loadingMsg').textContent = 'Loading player data…';
         // Step 3: Load all DB tables in parallel
         return Promise.all([
-          supa.from('ratings').select('*').eq('school_id', SCHOOL_ID),
+          fetchAllPaged('ratings', '*'),
           supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
           supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
           supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
           supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
-          supa.from('manual_players').select('*').eq('school_id', SCHOOL_ID),
-          supa.from('player_overrides').select('player_id,field_name,value').eq('school_id', SCHOOL_ID),
+          fetchAllPaged('manual_players', '*'),
+          fetchAllPaged('player_overrides', 'player_id,field_name,value', ['player_id','field_name']),
           fetchAllAwards(),
           supa.from('camp_roster').select('player_id,camp_jersey,camp_day').eq('school_id', SCHOOL_ID).order('camp_jersey')
         ]);

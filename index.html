@@ -3667,7 +3667,10 @@ function applyCampFilters() {
   });
 
   var count = document.getElementById('campCount');
-  if (count) count.textContent = filtered.length + ' camper' + (filtered.length !== 1 ? 's' : '');
+  if (count) {
+    var gkCount = filtered.filter(function(e){ return (e.camp_jersey||0) >= 91; }).length;
+    count.textContent = filtered.length + ' total • ' + (filtered.length - gkCount) + ' field • ' + gkCount + ' GK';
+  }
 
   var html = '';
   filtered.forEach(function(entry) {

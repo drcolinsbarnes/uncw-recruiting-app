@@ -581,6 +581,7 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
     </div>
     <div class="results-bar">
       <span id="campCount">No campers loaded</span>
+      <button id="campDNSBtn"  class="btn-sm btn-outline" onclick="toggleCampDNS()"  style="font-size:11px;padding:4px 8px;">Show DNS</button>
       <button id="campSortBtn" class="btn-sm btn-outline" onclick="toggleCampSort()" style="font-size:11px;padding:4px 8px;">A–Z Name</button>
     </div>
     <div class="player-list" id="campList"></div>
@@ -1649,7 +1650,7 @@ function loadAllDataFromSupabase() {
         fetchAllPaged('manual_players', '*'),
         fetchAllPaged('player_overrides', 'player_id,field_name,value', ['player_id','field_name']),
         fetchAllAwards(),
-        supa.from('camp_roster').select('player_id,camp_jersey,camp_day').eq('school_id', SCHOOL_ID).order('camp_jersey')
+        supa.from('camp_roster').select('player_id,camp_jersey,camp_day,camp_status').eq('school_id', SCHOOL_ID).order('camp_jersey')
       ]);
     } else {
       // Coach email not in coaches table — auto-create the record so ratings FK works
@@ -1674,7 +1675,7 @@ function loadAllDataFromSupabase() {
           fetchAllPaged('manual_players', '*'),
           fetchAllPaged('player_overrides', 'player_id,field_name,value', ['player_id','field_name']),
           fetchAllAwards(),
-          supa.from('camp_roster').select('player_id,camp_jersey,camp_day').eq('school_id', SCHOOL_ID).order('camp_jersey')
+          supa.from('camp_roster').select('player_id,camp_jersey,camp_day,camp_status').eq('school_id', SCHOOL_ID).order('camp_jersey')
         ]);
       });
     }
@@ -2727,6 +2728,7 @@ var committedDB = {};
 var manualPlayers = [];
 var campDB = [];        // [{player_id, camp_jersey, camp_day}] sorted by camp_jersey
 var campSortAlpha = false;  // false = jersey number order, true = A–Z last name
+var campShowDNS   = false;  // false = hide DNS players, true = show them greyed out
 var currentCoach = null;
 var currentPID = null;
 var selectedPIDs = [];
@@ -3726,6 +3728,7 @@ function applyCampFilters() {
 
   // campDB is already sorted by camp_jersey
   var filtered = campDB.filter(function(entry) {
+    if (!campShowDNS && entry.camp_status === 'dns') return false;
     var p = allPlayers.filter(function(x){ return x.id === entry.player_id; })[0];
     if (!p) return false;
     if (club && p.club !== club) return false;
@@ -3792,6 +3795,41 @@ function toggleCampSort() {
   applyCampFilters();
 }
 
+function toggleCampDNS() {
+  campShowDNS = !campShowDNS;
+  var btn = document.getElementById('campDNSBtn');
+  if (btn) {
+    btn.textContent = campShowDNS ? 'Hide DNS' : 'Show DNS';
+    btn.style.background  = campShowDNS ? '#dc2626' : '';
+    btn.style.color       = campShowDNS ? '#fff'    : '';
+    btn.style.borderColor = campShowDNS ? '#dc2626' : '';
+  }
+  applyCampFilters();
+}
+
+function markCampDNS(pid) {
+  var p     = allPlayers.filter(function(x){ return x.id === pid; })[0];
+  var entry = campDB.filter(function(e){ return e.player_id === pid; })[0];
+  if (!entry) return;
+  var isDNS   = entry.camp_status === 'dns';
+  var name    = p ? ((p.first||'') + ' ' + (p.last||'')) : pid;
+  var msg     = isDNS
+    ? 'Restore ' + name + ' to the active camp list?'
+    : 'Mark ' + name + ' as Did Not Show?\nThey will be hidden from the camp list.';
+  if (!confirm(msg)) return;
+  var newStatus = isDNS ? null : 'dns';
+  supa.from('camp_roster')
+    .update({ camp_status: newStatus })
+    .eq('school_id', SCHOOL_ID)
+    .eq('player_id', pid)
+    .then(function(r) {
+      if (r.error) { setSyncStatus('DNS update error: ' + r.error.message, true); return; }
+      entry.camp_status = newStatus;
+      applyCampFilters();
+      setSyncStatus(isDNS ? '✓ ' + name + ' restored to camp list' : '✓ ' + name + ' marked as Did Not Show');
+    });
+}
+
 function buildCampCard(entry, p) {
   var avg    = getAvg(p.id);
   var rClass = avg >= 4.5 ? 'rating-5' : avg >= 3.5 ? 'rating-4' : avg >= 2.5 ? 'rating-3' : avg >= 1.5 ? 'rating-2' : avg > 0 ? 'rating-1' : 'rating-0';
@@ -3807,20 +3845,28 @@ function buildCampCard(entry, p) {
     ? '<span class="tag" style="background:var(--navy);color:var(--gold);font-weight:700;">⚡ ECNL</span>'
     : '';
   var awards = getAwardTagsDetailed(p);
+  var isDNS = entry.camp_status === 'dns';
   var isGK = (p.position||'').toLowerCase().indexOf('goal') >= 0 || p.position === 'GK';
-  var jerseyBg    = isGK ? '#FFD700' : (isECNL ? 'var(--navy)' : 'var(--teal)');
-  var jerseyColor = isGK ? 'var(--navy)' : (isECNL ? 'var(--gold)' : '#fff');
-  return '<div class="player-card' + (isECNL ? ' ynt-player' : '') + '" onclick="cardClick(\'' + p.id + '\')" data-pid="' + p.id + '">' +
+  var jerseyBg    = isDNS ? '#9ca3af' : (isGK ? '#FFD700' : (isECNL ? 'var(--navy)' : 'var(--teal)'));
+  var jerseyColor = isDNS ? '#fff'     : (isGK ? 'var(--navy)' : (isECNL ? 'var(--gold)' : '#fff'));
+  var cardStyle   = isDNS ? ' style="opacity:0.5;"' : '';
+  var dnsBadge    = isDNS ? '<span class="tag" style="background:#dc2626;color:#fff;font-weight:700;">✕ DNS</span>' : '';
+  var dnsBtn      = '<button onclick="event.stopPropagation();markCampDNS(\'' + p.id + '\')" ' +
+    'style="margin-left:auto;font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid ' +
+    (isDNS ? '#16a34a;background:#dcfce7;color:#15803d;">' + 'Restore' : '#dc2626;background:#fff;color:#dc2626;">DNS') +
+    '</button>';
+  return '<div class="player-card' + (isECNL ? ' ynt-player' : '') + '"' + cardStyle + ' onclick="cardClick(\'' + p.id + '\')" data-pid="' + p.id + '">' +
     '<div class="card-top" style="flex:1;display:flex;align-items:flex-start;gap:10px;">' +
     '<div class="card-jersey" style="background:' + jerseyBg + ';color:' + jerseyColor + ';">' + (entry.camp_jersey || '#') + '</div>' +
     '<div class="card-info">' +
     '<div class="card-name">' + (p.first||'') + ' ' + (p.last||'') + '</div>' +
     '<div class="card-sub">' + (p.club||'') + ' · ' + (p.position||'') + ' · ' + (p.grad_year||'') + '</div>' +
     '</div>' +
-    '<div class="card-right">' +
+    '<div class="card-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
     '<span class="rating-badge ' + rClass + '">' + rLabel + '</span>' +
+    dnsBtn +
     '</div></div>' +
-    ((awards || dayBadge || ecnlBadge) ? '<div class="card-tags">' + ecnlBadge + dayBadge + awards + '</div>' : '') +
+    ((awards || dayBadge || ecnlBadge || dnsBadge) ? '<div class="card-tags">' + ecnlBadge + dayBadge + dnsBadge + awards + '</div>' : '') +
     '</div>';
 }
 

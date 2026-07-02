@@ -178,6 +178,12 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
   border-radius: 8px; font-size: 14px; background: var(--bg); }
 .form-group textarea { min-height: 80px; resize: vertical; font-family: inherit; }
 .star-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.gen-tier-btn { flex: 1; padding: 8px 4px; border: 2px solid var(--border); border-radius: 8px; background: #fff;
+                font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; line-height: 1.35; }
+.gen-tier-btn span { display: block; font-size: 10px; font-weight: 600; color: var(--muted);
+                     text-transform: uppercase; letter-spacing: .03em; }
+.gen-tier-btn.active { border-color: var(--teal); background: var(--teal); color: #fff; }
+.gen-tier-btn.active span { color: rgba(255,255,255,.85); }
 .star-opt { padding: 8px 14px; border-radius: 8px; border: 2px solid var(--border);
             font-size: 14px; font-weight: 700; cursor: pointer; transition: all .1s; }
 .star-opt.selected { border-color: var(--teal); background: var(--teal); color: #fff; }
@@ -709,6 +715,11 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
         <h3>Contact Information</h3>
         <div id="detailContactGrid"></div>
       </div>
+      <div class="detail-card" id="detailMsgCard">
+        <h3>Recruiting Communication</h3>
+        <button class="detail-rate-btn" onclick="openGenerateMsg()">✉️ Generate Message</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Tier auto-selected from average rating · copy &amp; paste — nothing sends from the app</div>
+      </div>
       <div class="detail-card" id="detailAwardsCard">
         <h3>Awards &amp; Recognition</h3>
         <div id="detailAwards"><p style="color:var(--muted);font-size:13px;font-style:italic;">No awards on file.</p></div>
@@ -965,6 +976,42 @@ body { font-family: 'Tomorrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', s
     <div class="modal-actions">
       <button style="background:var(--border);color:var(--text);" onclick="closeModal()">Cancel</button>
       <button style="background:var(--teal);color:#fff;" onclick="submitRating()">Save Rating</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ GENERATE MESSAGE MODAL (A1) ══ -->
+<div class="modal-overlay" id="generateMsgModal">
+  <div class="modal-sheet">
+    <h2>✉️ Generate Message</h2>
+    <p><span id="genMsgPlayer"></span> · <span id="genMsgAvg"></span></p>
+    <div class="form-group">
+      <label>Tier (auto-selected from rating)</label>
+      <div style="display:flex;gap:6px;">
+        <button id="tierBtn_t3" class="gen-tier-btn" onclick="setGenMsgTier('t3')">3.0+<span>UNCW Interest</span></button>
+        <button id="tierBtn_d1" class="gen-tier-btn" onclick="setGenMsgTier('d1')">2.0–2.9<span>Lower D1</span></button>
+        <button id="tierBtn_d23" class="gen-tier-btn" onclick="setGenMsgTier('d23')">&lt;2.0<span>D2 / D3</span></button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Format</label>
+      <div class="half-toggle">
+        <button id="fmtBtn_email" class="active" onclick="setGenMsgFormat('email')">📧 Email</button>
+        <button id="fmtBtn_text" onclick="setGenMsgFormat('text')">💬 Text</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Suggested Strengths (from coach notes — edit to fit the sentence)</label>
+      <textarea id="genMsgStrengths" oninput="buildGenMsg()" style="min-height:52px;" placeholder="e.g. Your ball-striking ability stood out — you can switch the point of attack with either foot."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Message (editable)</label>
+      <textarea id="genMsgText" style="min-height:220px;font-size:13px;line-height:1.5;"></textarea>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Copy &amp; paste into your own email or messaging app — nothing is sent from here (NCAA compliant).</div>
+    <div class="modal-actions">
+      <button style="background:var(--border);color:var(--text);" onclick="closeGenerateMsg()">Close</button>
+      <button id="genMsgCopyBtn" style="background:var(--teal);color:#fff;" onclick="copyGenMsg()">📋 Copy to Clipboard</button>
     </div>
   </div>
 </div>
@@ -4154,12 +4201,91 @@ function closeAddPlayer() {
 
 // Also apply saved edits on load
 
+// ── GENERATE MESSAGE FEATURE (A1) ──────────────────────────
+var MSG_TEMPLATES = {
+  t3:  { email: "Hi {first},\n\nThank you for making the trip to our UNCW ID Camp. I hope you got a feel for who we are as a program — the Seahawks Way is something we take seriously, and it means competing with intensity and integrity, growing as players and people, and being part of something bigger than yourself. It was great having you experience that environment firsthand.\n\nI want to be straightforward with you, which I think is the most respectful thing I can do: you stood out. {strengths} That’s exactly the kind of player we’re recruiting.\n\nUNCW competes in the CAA, one of the top 10 conferences nationally (out of 30) in women’s soccer, and we’ve earned a consistent presence in the top 50 nationally in RPI. The bar for our roster is extremely high — and we believe you can compete at it.\n\nWe’d like to invite you to campus for a visit — meet the team, tour our facilities, and sit down with our staff to talk about where you’d fit in our plans. It’s the best way to see what your life as a Seahawk could look like.\n\nReply to this email or reach out any time, and we’ll set up a date that works for you and your family.\n\nWe’re excited about you. Let’s keep the conversation going.\n\nWarm regards,",  text: "Hi {first}, it’s the UNCW Women’s Soccer staff. You stood out at our ID Camp — {strengths} We’re genuinely interested and would love to get you on campus for a visit. Reply here and we’ll set up a date that works for you and your family. Go Seahawks!" },
+  d1:  { email: "Hi {first},\n\nThank you for making the trip to our UNCW ID Camp. I hope you got a feel for who we are as a program — the Seahawks Way is something we take seriously, and it means competing with intensity and integrity, growing as players and people, and being part of something bigger than yourself. It was great having you experience that environment firsthand.\n\nI want to be straightforward with you, which I think is the most respectful thing I can do. UNCW competes in the CAA, one of the top 10 conferences nationally (out of 30) in women’s soccer, and we’ve earned a consistent presence in the top 50 nationally in RPI. That means the bar for our roster is extremely high — athletically, technically, and tactically. We receive a significant number of talented players at camp, and decisions are difficult.\n\nYou’re a capable player. {strengths} What you showed at camp is the kind of foundation that can absolutely succeed at the next level.\n\nBased on our current roster needs and the level of competition we’re recruiting to, I believe you’d find a better fit and more opportunity at the lower D1 level — a place where you can compete, develop, and make a real impact. That’s not a ceiling — it’s a launching pad.\n\nWe’d love to see you back at a future camp. It’s another chance to compete, develop, and show what you can do — and we enjoy having motivated players in our environment.\n\nDon’t hesitate to reach out. I’m glad to offer feedback or help connect you with programs that might be a great fit.\n\nKeep working — you have a future in this game.\n\nWarm regards,",  text: "Hi {first}, it’s the UNCW Women’s Soccer staff. Thanks for competing at our ID Camp — {strengths} Based on our roster needs and the level we recruit to, we believe you’d find a better fit and more opportunity at the lower D1 level — a launching pad, not a ceiling. Glad to offer feedback or connect you with programs any time." },
+  d23: { email: "Hi {first},\n\nThank you for attending our ID Camp — it was great having you at UNCW. I hope you experienced the Seahawks Way firsthand: a competitive, high-standards environment where we care deeply about our players’ development and hold each other to a high bar every single day.\n\nI’ll be direct with you, because I think that serves you better than vague language. UNCW plays in the CAA, one of the top 10 conferences in the country out of 30 in women’s soccer, and we consistently rank in the top 50 nationally in RPI. That means every spot on our roster is earned against an extremely competitive standard — and we recruit with that level of competition in mind.\n\nYou showed {strengths} and brought a good attitude to camp. That counts for something, and we appreciate the effort.\n\nAfter evaluating the full group, I believe the Division II or Division III level is genuinely the right landing spot for you — not as a consolation, but as a real opportunity to compete, contribute, and build something meaningful over four years. Some of the best programs in the country play at those levels, and they’d be lucky to have you in the mix.\n\nWe’d love to see you back at a future camp. Continuing to develop and compete is always worth it, and we’re glad to have motivated players in our environment.\n\nPlease reach out if I can help in any way — feedback, connections, whatever you need.\n\nKeep working. Your recruiting process isn’t over — it’s just finding the right home.\n\nWarm regards,", text: "Hi {first}, it’s the UNCW Women’s Soccer staff. Thanks for coming to our ID Camp — {strengths} After evaluating the full group, we believe D2/D3 is genuinely the right landing spot for you — some of the best programs in the country play at those levels. Happy to help with feedback or connections whenever you need." }
+};
+var genMsgTier = null;
+var genMsgFormat = 'email';
+
+function msgTierForAvg(avg){
+  if(avg >= 3) return 't3';
+  if(avg >= 2) return 'd1';
+  if(avg > 0)  return 'd23';
+  return null;
+}
+
+function openGenerateMsg(){
+  var p = allPlayers.filter(function(x){ return x.id===currentPID; })[0];
+  if(!p) return;
+  var avg = getAvg(currentPID);
+  genMsgTier = msgTierForAvg(avg);
+  genMsgFormat = 'email';
+  document.getElementById('genMsgPlayer').textContent = (p.first||'') + ' ' + (p.last||'');
+  document.getElementById('genMsgAvg').textContent = avg > 0 ? avg.toFixed(1) + '★ average rating' : 'No ratings yet — pick a tier manually';
+  var notes = (ratingsDB[currentPID]||[]).map(function(r){ return (r.note||'').trim(); }).filter(function(n){ return n; });
+  document.getElementById('genMsgStrengths').value = notes.join('; ');
+  renderGenMsgControls();
+  buildGenMsg();
+  document.getElementById('generateMsgModal').classList.add('open');
+}
+
+function setGenMsgTier(t){ genMsgTier = t; renderGenMsgControls(); buildGenMsg(); }
+function setGenMsgFormat(f){ genMsgFormat = f; renderGenMsgControls(); buildGenMsg(); }
+
+function renderGenMsgControls(){
+  ['t3','d1','d23'].forEach(function(t){
+    var b = document.getElementById('tierBtn_' + t);
+    if(b) b.className = 'gen-tier-btn' + (genMsgTier === t ? ' active' : '');
+  });
+  ['email','text'].forEach(function(f){
+    var b = document.getElementById('fmtBtn_' + f);
+    if(b) b.className = (genMsgFormat === f ? 'active' : '');
+  });
+}
+
+function buildGenMsg(){
+  var ta = document.getElementById('genMsgText');
+  if(!genMsgTier){
+    ta.value = '';
+    ta.placeholder = 'Select a tier above to generate the message.';
+    return;
+  }
+  var p = allPlayers.filter(function(x){ return x.id===currentPID; })[0];
+  var tpl = MSG_TEMPLATES[genMsgTier][genMsgFormat];
+  var strengths = document.getElementById('genMsgStrengths').value.trim() || '[insert 1–2 player-specific strengths here]';
+  var isFragment = (genMsgTier === 'd23' && genMsgFormat === 'email');
+  if(!isFragment && !/[.!?\]]$/.test(strengths)) strengths += '.';
+  ta.value = tpl.split('{first}').join((p && p.first) || '[First Name]').split('{strengths}').join(strengths);
+}
+
+function copyGenMsg(){
+  var ta = document.getElementById('genMsgText');
+  var btn = document.getElementById('genMsgCopyBtn');
+  function done(){
+    btn.textContent = '✓ Copied!';
+    setTimeout(function(){ btn.textContent = '📋 Copy to Clipboard'; }, 2000);
+  }
+  function fallback(){
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e) { alert('Copy failed — select the text and copy manually.'); }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(done, fallback);
+  } else { fallback(); }
+}
+
+function closeGenerateMsg(){ document.getElementById('generateMsgModal').classList.remove('open'); }
+
 // close modals on overlay tap
 document.addEventListener('click', function(e){
   if(e.target.classList.contains('modal-overlay')){
     closeModal();
     closeEditPlayer();
     closeAddPlayer();
+    closeGenerateMsg();
   }
 });
 

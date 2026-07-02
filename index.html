@@ -3212,7 +3212,12 @@ function updateAvgDisplay(pid) {
   var el = document.getElementById('detailAvgNum');
   var stars = document.getElementById('detailStars');
   if(avg > 0){
-    el.textContent = avg.toFixed(1);
+    var trend = getTrend(pid);
+    var tHtml = '';
+    if(trend === 'up')   tHtml = ' <span title="Improving (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#16a34a;">\u2197</span>';
+    if(trend === 'flat') tHtml = ' <span title="Steady (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#9ca3af;">\u2192</span>';
+    if(trend === 'down') tHtml = ' <span title="Declining (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#dc2626;">\u2198</span>';
+    el.innerHTML = avg.toFixed(1) + tHtml;
     var starHtml = '<div class="star-visual">';
     for(var i=1; i<=5; i++){
       if(avg >= i) starHtml += '<span class="star-vis-full">★</span>';
@@ -3227,21 +3232,69 @@ function updateAvgDisplay(pid) {
   }
 }
 
-function getAvg(pid) {
+// ── RATING MODEL (July 2026) ─────────────────────────────────────────
+// Level = 75% decay-weighted coach avg + 25% max award (highest badge).
+// Awards use the MAX rule — never averaged (a Regional invite must not
+// dilute a National one). Coach ratings decay by VIEWING BLOCK, not
+// calendar time: Winter = Nov–Feb, Spring = Mar–Jul, Aug–Oct folds into
+// the next Winter. Half-life = 2 blocks (one scouting year).
+function blockIndex(ts) {
+  var d = ts ? new Date(ts) : new Date();
+  var y = d.getFullYear(), m = d.getMonth();      // m: 0=Jan
+  if(m <= 1) return y * 2;                        // Jan–Feb → Winter ending y
+  if(m <= 6) return y * 2 + 1;                    // Mar–Jul → Spring y
+  return (y + 1) * 2;                             // Aug–Dec → Winter ending y+1
+}
+function coachDecayAvg(pid) {
   var entries = ratingsDB[pid] || [];
+  var nowB = blockIndex(null), num = 0, den = 0;
+  entries.forEach(function(r){
+    var s = parseFloat(r.score) || 0;
+    if(!s) return;
+    var w = Math.pow(0.5, (nowB - blockIndex(r.ts)) / 2);
+    num += s * w; den += w;
+  });
+  return den > 0 ? num / den : null;
+}
+function maxAward(p) {
+  if(!p) return null;
+  var v = [];
+  if(p.ynt)          v.push(5);
+  if(p.all_american) v.push(5);
+  if(p.conf_poy)     v.push(5);
+  if(p.conf_first)   v.push(4);
+  if(p.conf_second)  v.push(3);
+  if(p.odp)          v.push(3);
+  return v.length ? Math.max.apply(null, v) : null;
+}
+function getAvg(pid) {
   var p = allPlayers.filter(function(x){ return x.id===pid; })[0];
-  var scores = entries.map(function(r){ return parseFloat(r.score)||0; });
-  // Add auto-award ratings
-  if(p){
-    for(var i=0;i<(p.ynt||0);i++)         scores.push(5);
-    for(var i=0;i<(p.all_american||0);i++) scores.push(5);
-    for(var i=0;i<(p.conf_poy||0);i++)     scores.push(5);
-    for(var i=0;i<(p.conf_first||0);i++)   scores.push(4);
-    for(var i=0;i<(p.conf_second||0);i++)  scores.push(3);
-    for(var i=0;i<(p.odp||0);i++)          scores.push(3);
-  }
-  if(!scores.length) return 0;
-  return Math.round(scores.reduce(function(a,b){return a+b;},0)/scores.length*10)/10;
+  var coach = coachDecayAvg(pid);
+  var award = maxAward(p);
+  var lvl;
+  if(coach !== null && award !== null) lvl = 0.75 * coach + 0.25 * award;
+  else if(coach !== null) lvl = coach;
+  else if(award !== null) lvl = award;
+  else return 0;
+  return Math.round(lvl * 10) / 10;
+}
+// Trend arrow: latest viewing block vs previous block with data, ±0.3.
+function getTrend(pid) {
+  var entries = ratingsDB[pid] || [];
+  var blocks = {};
+  entries.forEach(function(r){
+    var s = parseFloat(r.score) || 0;
+    if(!s) return;
+    var b = blockIndex(r.ts);
+    (blocks[b] = blocks[b] || []).push(s);
+  });
+  var keys = Object.keys(blocks).map(Number).sort(function(a,b){ return a - b; });
+  if(keys.length < 2) return null;
+  function avg(a){ return a.reduce(function(x,y){ return x + y; }, 0) / a.length; }
+  var diff = avg(blocks[keys[keys.length-1]]) - avg(blocks[keys[keys.length-2]]);
+  if(diff >= 0.3)  return 'up';
+  if(diff <= -0.3) return 'down';
+  return 'flat';
 }
 
 // ── RATING FORM ──

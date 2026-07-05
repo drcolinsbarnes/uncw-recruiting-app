@@ -1683,7 +1683,7 @@ function loadAllDataFromSupabase() {
       return Promise.all([
         fetchAllPaged('ratings', '*'),
         supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
-        fetchAllPaged('committed', 'player_id,school_name', ['player_id']),
+        supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
         supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
         supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
         fetchAllPaged('manual_players', '*'),
@@ -1708,7 +1708,7 @@ function loadAllDataFromSupabase() {
         return Promise.all([
           fetchAllPaged('ratings', '*'),
           supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
-          fetchAllPaged('committed', 'player_id,school_name', ['player_id']),
+          supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
           supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
           supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
           fetchAllPaged('manual_players', '*'),
@@ -1840,7 +1840,7 @@ function applySupabaseAwards(awardRows) {
   var awardMap = {};
   awardRows.forEach(function(a) {
     var key = (a.full_name || '').toLowerCase().trim();
-    if (!awardMap[key]) awardMap[key] = {ynt:0,all_american:0,conf_poy:0,conf_first:0,conf_second:0,odp:0,ga_national:0,ga_region:0};
+    if (!awardMap[key]) awardMap[key] = {ynt:0,all_american:0,conf_poy:0,conf_first:0,conf_second:0,odp:0};
     var m = awardMap[key];
     switch(a.award_type) {
       case 'ynt':         m.ynt++;          break;
@@ -1849,8 +1849,6 @@ function applySupabaseAwards(awardRows) {
       case 'conf_first':  m.conf_first++;   break;
       case 'conf_second': m.conf_second++;  break;
       case 'odp':         m.odp++;          break;
-      case 'ga_national_id': m.ga_national++; break;
-      case 'ga_regional_id': m.ga_region++;   break;
     }
     // Accumulate detailed list for year-labeled tags
     if (!awardsDetail[key]) awardsDetail[key] = [];
@@ -1877,8 +1875,6 @@ function applySupabaseAwards(awardRows) {
       p.conf_first   = Math.max(p.conf_first||0, a.conf_first);
       p.conf_second  = Math.max(p.conf_second||0, a.conf_second);
       p.odp          = Math.max(p.odp||0, a.odp);
-      p.ga_national  = Math.max(p.ga_national||0, a.ga_national);
-      p.ga_region    = Math.max(p.ga_region||0, a.ga_region);
     }
   });
 }
@@ -3312,8 +3308,6 @@ function maxAward(p) {
   if(p.conf_first)   v.push(4);
   if(p.conf_second)  v.push(3);
   if(p.odp)          v.push(3);
-  if(p.ga_national)  v.push(4);
-  if(p.ga_region)    v.push(3);
   return v.length ? Math.max.apply(null, v) : null;
 }
 var _pByIdMap = {}, _pByIdCount = -1;

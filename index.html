@@ -1703,7 +1703,7 @@ function loadAllDataFromSupabase() {
       return Promise.all([
         fetchAllPaged('ratings', '*'),
         supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
-        supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
+        fetchAllPaged('committed', 'player_id,school_name', ['player_id']),
         supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
         supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
         fetchAllPaged('manual_players', '*'),
@@ -1728,7 +1728,7 @@ function loadAllDataFromSupabase() {
         return Promise.all([
           fetchAllPaged('ratings', '*'),
           supa.from('shortlist').select('player_id').eq('school_id', SCHOOL_ID),
-          supa.from('committed').select('player_id,school_name').eq('school_id', SCHOOL_ID),
+          fetchAllPaged('committed', 'player_id,school_name', ['player_id']),
           supa.from('interest').select('player_id,level,is_camper,has_contacted').eq('school_id', SCHOOL_ID),
           supa.from('watchlist').select('player_id').eq('school_id', SCHOOL_ID),
           fetchAllPaged('manual_players', '*'),
@@ -3276,11 +3276,14 @@ function updateAvgDisplay(pid) {
   var el = document.getElementById('detailAvgNum');
   var stars = document.getElementById('detailStars');
   if(avg > 0){
-    var trend = getTrend(pid);
-    var tHtml = '';
-    if(trend === 'up')   tHtml = ' <span title="Improving (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#16a34a;">\u2197</span>';
-    if(trend === 'flat') tHtml = ' <span title="Steady (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#9ca3af;">\u2192</span>';
-    if(trend === 'down') tHtml = ' <span title="Declining (latest viewing block vs previous)" style="font-size:22px;vertical-align:middle;color:#dc2626;">\u2198</span>';
+    var ct = getTrend(pid), at = getAwardTrend(playerById(pid));
+    function trArrow(tr, label, mark){
+      var col = tr==='up' ? '#16a34a' : (tr==='down' ? '#dc2626' : '#9ca3af');
+      var gly = tr==='up' ? '\u2197' : (tr==='down' ? '\u2198' : '\u2192');
+      if(!tr) return '';
+      return ' <span title="'+label+'" style="font-size:20px;vertical-align:middle;color:'+col+';"><span style="font-size:10px;color:#9ca3af;">'+mark+'</span>'+gly+'</span>';
+    }
+    var tHtml = trArrow(ct, 'Coaching trend', 'C') + trArrow(at, 'Awards trend', 'A');
     el.innerHTML = avg.toFixed(1) + tHtml;
     var starHtml = '<div class="star-visual">';
     for(var i=1; i<=5; i++){
@@ -3311,25 +3314,56 @@ function blockIndex(ts) {
 }
 function coachDecayAvg(pid) {
   var entries = ratingsDB[pid] || [];
-  var nowB = blockIndex(null), num = 0, den = 0;
+  var nowB = blockIndex(null), num = 0, den = 0, latestB = -Infinity, lnum = 0, lden = 0;
   entries.forEach(function(r){
     var s = parseFloat(r.score) || 0;
     if(!s) return;
-    var w = Math.pow(0.5, (nowB - blockIndex(r.ts)) / 2);
+    var b = blockIndex(r.ts), w = Math.pow(0.5, (nowB - b) / 2);
     num += s * w; den += w;
+    if(b > latestB){ latestB = b; lnum = s; lden = 1; }
+    else if(b === latestB){ lnum += s; lden++; }
   });
-  return den > 0 ? num / den : null;
+  if(den <= 0) return null;
+  var wavg = num / den, floor = lden ? lnum / lden : wavg;
+  return Math.max(floor, wavg);
 }
+function seasonEndYear(s){ var m = String(s||'').match(/(\d{4})/); return m ? parseInt(m[1],10)+1 : 0; }
+function currentSeasonEndYear(){ var d = new Date(); return (d.getMonth() >= 7) ? d.getFullYear()+1 : d.getFullYear(); }
+var AWARD_VALUE = { ynt:5, all_american:5, conf_poy:5, conf_first:4, conf_second:3, odp:3, ga_national_id:4, ga_regional_id:3 };
 function maxAward(p) {
   if(!p) return null;
+  var key = ((p.first||'') + ' ' + (p.last||'')).toLowerCase().trim();
+  var detail = awardsDetail[key] || [];
+  if(detail.length){
+    var cur = currentSeasonEndYear(), num = 0, den = 0, floor = 0, seen = {};
+    detail.forEach(function(a){
+      var val = AWARD_VALUE[a.type]; if(!val) return;
+      var ay = seasonEndYear(a.season); if(!ay) return;
+      var k = a.type + '|' + a.season; if(seen[k]) return; seen[k] = 1;
+      var age = Math.max(0, cur - ay), w = Math.pow(0.7, age);
+      num += val * w; den += w;
+      if(age === 0 && val > floor) floor = val;
+    });
+    if(den > 0) return Math.max(floor, num / den);
+  }
   var v = [];
-  if(p.ynt)          v.push(5);
-  if(p.all_american) v.push(5);
-  if(p.conf_poy)     v.push(5);
-  if(p.conf_first)   v.push(4);
-  if(p.conf_second)  v.push(3);
-  if(p.odp)          v.push(3);
+  if(p.ynt) v.push(5); if(p.conf_poy) v.push(5); if(p.conf_first) v.push(4);
+  if(p.conf_second) v.push(3); if(p.odp) v.push(3);
   return v.length ? Math.max.apply(null, v) : null;
+}
+function getAwardTrend(p) {
+  if(!p) return null;
+  var key = ((p.first||'') + ' ' + (p.last||'')).toLowerCase().trim();
+  var detail = awardsDetail[key] || [], bySeason = {};
+  detail.forEach(function(a){
+    var val = AWARD_VALUE[a.type]; if(!val) return;
+    var ay = seasonEndYear(a.season); if(!ay) return;
+    if(!bySeason[ay] || val > bySeason[ay]) bySeason[ay] = val;
+  });
+  var yrs = Object.keys(bySeason).map(Number).sort(function(a,b){ return a-b; });
+  if(yrs.length < 2) return null;
+  var diff = bySeason[yrs[yrs.length-1]] - bySeason[yrs[yrs.length-2]];
+  return diff > 0 ? 'up' : (diff < 0 ? 'down' : 'flat');
 }
 var _pByIdMap = {}, _pByIdCount = -1;
 function playerById(pid) {

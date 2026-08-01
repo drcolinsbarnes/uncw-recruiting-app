@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>UNCW Transfer Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+:root {
+  --teal: #00a6a0;
+  --navy: #00326f;
+  --gold: #f0c040;
+  --bg: #f4f6f9;
+  --card: #ffffff;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --red: #ef4444;
+  --green: #22c55e;
+  --orange: #f97316;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); height: 100vh; height: 100dvh;
+  overflow: hidden; -webkit-tap-highlight-color: transparent;
+}
+#app { max-width: 480px; margin: 0 auto; height: 100vh; height: 100dvh;
+       display: flex; flex-direction: column; overflow: hidden; }
+
+.app-header { background: var(--navy); color: #fff; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.app-header h1 { font-size: 15px; font-weight: 700; }
+.app-header .sub { font-size: 10px; opacity: .7; }
+.switch-btn { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3);
+  border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.switch-btn:hover { background: rgba(255,255,255,.22); }
+
+.screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+
+.filter-bar { background: #fff; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.filter-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.filter-row:last-child { margin-bottom: 0; }
+.filter-row select, .filter-row input { flex: 1; padding: 7px 8px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.filter-row select:focus, .filter-row input:focus { outline: 2px solid var(--teal); }
+
+.results-bar { padding: 6px 12px; font-size: 11px; color: var(--muted);
+  background: var(--bg); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+
+.list { flex: 1; overflow-y: auto; padding: 8px 12px; }
+
+.player-row { background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+.player-row:hover { border-color: var(--teal); }
+.pr-top { display: flex; justify-content: space-between; align-items: baseline; }
+.pr-name { font-weight: 700; font-size: 14px; color: var(--navy); }
+.pr-overall { font-weight: 800; font-size: 15px; color: var(--navy); }
+.pr-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pos-pill { display: inline-block; background: var(--navy); color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px; margin-right: 6px; }
+
+.stub-screen { flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+.stub-screen b { display: block; color: var(--navy); font-size: 15px; margin-bottom: 6px; }
+
+.bottom-nav { background: var(--navy); display: flex; position: sticky; bottom: 0; z-index: 100; flex-shrink: 0; }
+.nav-btn { flex: 1; background: none; border: none; color: rgba(255,255,255,.55); padding: 8px 2px;
+  font-size: 9px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.nav-btn.active { color: #fff; }
+.nav-icon { font-size: 16px; }
+
+.loading-note { padding: 16px; font-size: 12px; color: var(--muted); text-align: center; }
+.config-warning { background: var(--gold); color: var(--navy); font-size: 11px; font-weight: 700;
+  padding: 8px 12px; text-align: center; }
+
+/* login screen — same magic-link pattern as the recruiting app */
+#screenLogin { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 24px; text-align: center; }
+#screenLogin h1 { color: var(--navy); font-size: 20px; margin-bottom: 4px; }
+#screenLogin p { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+#loginEmail { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 10px; }
+#loginBtn { width: 100%; padding: 10px; background: var(--navy); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+#loginSent { display: none; font-size: 13px; color: var(--teal); margin-top: 12px; }
+
+/* player detail (reuses the approved v4 card design) */
+.player-header { padding: 16px; border-bottom: 1px solid var(--border); }
+.player-name { font-size: 18px; font-weight: 700; color: var(--navy); }
+.player-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.overall-score { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px;
+  background: linear-gradient(135deg, var(--navy), #004a9e); border-radius: 10px; color: #fff; }
+.overall-score .num { font-size: 26px; font-weight: 800; line-height: 1; }
+.overall-score .lbl { font-size: 10px; opacity: .8; text-transform: uppercase; }
+.universal-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+.ustat { text-align: center; }
+.ustat .v { font-size: 15px; font-weight: 700; color: var(--navy); }
+.ustat .k { font-size: 9px; color: var(--muted); text-transform: uppercase; }
+.badges-section { padding: 12px 16px; overflow-y: auto; }
+.badge-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.badge-top { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.badge-label { font-size: 12px; font-weight: 700; }
+.badge-value { font-size: 14px; font-weight: 800; color: var(--navy); }
+.pct-scopes { display: flex; gap: 8px; }
+.pct-scope { flex: 1; }
+.pct-scope-lbl { font-size: 9px; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 2px; }
+.pct-bar-track { height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.pct-bar-fill { height: 100%; border-radius: 4px; }
+.back-btn { background: none; border: none; color: var(--teal); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 0 8px; }
+
+/* Team tab — UNCW's own roster, bio profile pulled straight from the
+   Recruiting DB (roster_players) so every player shows something even
+   before/without a Career DB stats link (true freshmen never will have
+   Career DB rows until they actually play a season). */
+.team-group-label { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; padding: 10px 4px 4px; }
+.roster-card { background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px; }
+.rc-top { display: flex; justify-content: space-between; align-items: baseline; }
+.rc-name { font-weight: 700; font-size: 14px; color: var(--navy); }
+.rc-rating { font-weight: 800; font-size: 14px; color: var(--navy); }
+.rc-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.rc-notes { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
+.rc-stats { display: flex; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.rc-stat { font-size: 10px; color: var(--muted); }
+.rc-stat b { color: var(--navy); font-size: 12px; display: block; }
+.rc-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 20px; margin-left: 6px; }
+.rc-badge.linked { background: #dcfce7; color: #15803d; }
+.rc-badge.no-data { background: var(--border); color: var(--muted); }
+.rc-career { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.rc-career-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 2px 0; }
+.rc-career-season { font-size: 10px; font-weight: 700; color: var(--navy); flex-shrink: 0; width: 44px; }
+.rc-career-team { font-size: 11px; color: var(--text); flex: 1; }
+.rc-career-line { font-size: 10px; color: var(--muted); flex-shrink: 0; text-align: right; }
+.rc-profile { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.rc-profile-club { font-size: 11px; font-weight: 700; color: var(--navy); }
+.rc-profile-rating { font-size: 11px; color: var(--muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ LOGIN SCREEN (magic link — same mechanism as the recruiting app) ══ -->
+  <div id="screenLogin">
+    <h1 id="loginH1">UNCW Transfer Portal</h1>
+    <p>Coach login — magic link, no password needed.</p>
+    <input type="email" id="loginEmail" placeholder="you@uncw.edu">
+    <button id="loginBtn" onclick="sendMagicLink()">Send magic link</button>
+    <div id="loginSent">Check your email — click the link to sign in.</div>
+  </div>
+
+  <!-- ══ MAIN APP (hidden until authenticated) ══ -->
+  <div id="mainApp" style="display:none; flex-direction:column; height:100%; overflow:hidden;">
+
+    <div class="app-header">
+      <div>
+        <h1>UNCW Transfer Portal</h1>
+        <div class="sub">Women's Soccer · v0.4 · Career DB live</div>
+      </div>
+      <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
+    </div>
+
+    <div id="configWarning" class="config-warning" style="display:none;"></div>
+
+    <!-- ══ PLAYERS SCREEN — the only tab wired to real data in this framework
+         pass, per Colin (July 30, 2026): "I just want to assess all players
+         in the NCAA stats from last year" — browses the Career DB's full
+         ncaa_d1 player pool directly (player_stats/player_seasons/teams/
+         unified_players), NOT portal_players (B7 hasn't been run yet). ══ -->
+    <div id="screenPlayers" class="screen active">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <select id="fPos" onchange="renderPlayers()">
+            <option value="">All Positions</option>
+            <option value="GK">GK</option><option value="CB">CB</option><option value="OB">OB</option>
+            <option value="DM">DM</option><option value="CM">CM</option><option value="AM">AM</option>
+            <option value="WF">WF</option><option value="CF">CF</option>
+          </select>
+          <select id="fConf" onchange="renderPlayers()"><option value="">All Conferences</option></select>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="fSearch" placeholder="Search by name or school…" oninput="renderPlayers()">
+        </div>
+      </div>
+      <div class="results-bar" id="playersResultsBar">Loading…</div>
+      <div class="list" id="playersList"></div>
+    </div>
+
+    <!-- ══ Player detail (shown over the Players list) ══ -->
+    <div id="screenPlayerDetail" class="screen">
+      <div style="padding:12px 16px 0;"><button class="back-btn" onclick="showScreen('Players')">← Back to Players</button></div>
+      <div id="playerDetailBody" style="flex:1; overflow-y:auto;"></div>
+    </div>
+
+    <!-- ══ Stub screens — intentionally not built out yet, per Colin's own
+         sequencing: Shortlist/Visits need interest-tracking on portal_players
+         (waiting on B7), Team needs UNCW roster linked to the Career DB,
+         Insights/Rankings need the portal pool + awards scrape. ══ -->
+    <div id="screenShortlist" class="screen"><div class="stub-screen"><div><b>Shortlist</b>Needs portal player tracking (B7) — not run yet, by Colin's choice, until the NCAA player pool is assessed first.</div></div></div>
+    <div id="screenVisits" class="screen"><div class="stub-screen"><div><b>Visits</b>Same as Shortlist — waiting on B7.</div></div></div>
+    <!-- ══ Team tab — UNCW's own roster (July 31, 2026: link_uncw_roster.py
+         has now run, 21/32 linked). Bio profile always comes from the
+         Recruiting DB roster_players table so incoming freshmen with no
+         Career DB history yet still show a real profile; career stats layer
+         on top for anyone with a unified_id once the Career DB anon key is
+         configured. ══ -->
+    <div id="screenTeam" class="screen">
+      <div class="results-bar" id="teamResultsBar">Loading roster…</div>
+      <div class="list" id="teamList"></div>
+    </div>
+    <div id="screenInsights" class="screen"><div class="stub-screen"><div><b>Insights</b>Needs the portal pool (B7) and awards data to be meaningful.</div></div></div>
+    <div id="screenRankings" class="screen"><div class="stub-screen"><div><b>Rankings</b>Needs conference/national percentiles across a full loaded season — works once B4 has real data and this screen gets built out.</div></div></div>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" onclick="showScreen('Players')" id="navPlayers"><span class="nav-icon">👥</span>Players</button>
+      <button class="nav-btn" onclick="showScreen('Shortlist')" id="navShortlist"><span class="nav-icon">★</span>Shortlist</button>
+      <button class="nav-btn" onclick="showScreen('Visits')" id="navVisits"><span class="nav-icon">🏠</span>Visits</button>
+      <button class="nav-btn" onclick="showScreen('Team')" id="navTeam"><span class="nav-icon">👕</span>Team</button>
+      <button class="nav-btn" onclick="showScreen('Insights')" id="navInsights"><span class="nav-icon">📊</span>Insights</button>
+      <button class="nav-btn" onclick="showScreen('Rankings')" id="navRankings"><span class="nav-icon">🏆</span>Rankings</button>
+    </nav>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// CONFIG
+//
+// RECRUIT_* — known-good, same values already live in the deployed
+// recruiting app (App/uncw-recruiting-app/index.html), safe to reuse: this
+// IS the public anon key (JWT role: "anon"), not a secret. Powers coach
+// login (shared coaches/schools tables) exactly like the recruiting app.
+//
+// CAREER_* — configured July 31, 2026. Public anon key for the Career DB
+// (project ref iyxwjxhuedyskfmzqdpq), confirmed NOT the service_role key
+// (JWT role: "anon"). player_stats/player_seasons/teams/unified_players
+// all confirmed readable with this key — public-read RLS already in place,
+// no policy changes were needed.
+// ════════════════════════════════════════════════════════════════════════
+var RECRUIT_URL = 'https://kjdsntzkmqwdkckwvszk.supabase.co';
+var RECRUIT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqZHNudHprbXF3ZGtja3d2c3prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4MDk1NzEsImV4cCI6MjA5NTM4NTU3MX0.7lwQp9R0zAULvbxAv8QhnVt3JFug6Zpd4OyJ-NT39jY';
+var CAREER_URL  = 'https://iyxwjxhuedyskfmzqdpq.supabase.co';
+var CAREER_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5eHdqeGh1ZWR5c2tmbXpxZHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNDU2NzQsImV4cCI6MjA5NTgyMTY3NH0.DuKhtq43xzRMrRXnczF6blSMFG4dYcXwjJ1KMh6mw5c';
+
+var RECRUITING_APP_URL = 'https://uncw-recruiting-app.pages.dev'; // confirmed live URL
+// This app now lives INSIDE the uncw-recruiting-app repo (App/uncw-recruiting-app/
+// transfer-app/index.html, added July 31, 2026 — no separate repo/Pages project),
+// so once deployed it'll be reachable at https://uncw-recruiting-app.pages.dev/transfer-app/.
+// TODO — the recruiting app's own header doesn't have a reciprocal "↔ Transfer App"
+// switch button pointing back here yet; add one in index.html if Colin wants it.
+
+var recruitSupa = supabase.createClient(RECRUIT_URL, RECRUIT_KEY);
+var careerSupa  = CAREER_KEY ? supabase.createClient(CAREER_URL, CAREER_KEY) : null;
+
+var allPlayers = []; // cached ncaa_d1 player rows for the Players tab
+
+// ── Auth (magic link — same UX as the recruiting app) ──────────────────────
+function sendMagicLink() {
+  var email = document.getElementById('loginEmail').value.trim();
+  if (!email) return;
+  recruitSupa.auth.signInWithOtp({ email: email }).then(function(res) {
+    document.getElementById('loginSent').style.display = 'block';
+  });
+}
+
+recruitSupa.auth.onAuthStateChange(function(event, session) {
+  if (session) {
+    document.getElementById('screenLogin').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'flex';
+    boot();
+  }
+});
+
+function switchToRecruitingApp() {
+  if (confirm('Switch to the Recruiting app?')) {
+    window.location.href = RECRUITING_APP_URL;
+  }
+}
+
+// ── Nav ──────────────────────────────────────────────────────────────────
+var SCREENS = ['Players','PlayerDetail','Shortlist','Visits','Team','Insights','Rankings'];
+function showScreen(name) {
+  SCREENS.forEach(function(s) {
+    var el = document.getElementById('screen' + s);
+    if (el) el.classList.toggle('active', s === name);
+  });
+  ['Players','Shortlist','Visits','Team','Insights','Rankings'].forEach(function(s) {
+    var btn = document.getElementById('nav' + s);
+    if (btn) btn.classList.toggle('active', s === name);
+  });
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+var UNCW_SCHOOL_ID = null;
+
+function boot() {
+  if (!careerSupa) {
+    var w = document.getElementById('configWarning');
+    w.style.display = 'block';
+    w.textContent = '⚠️ Career DB anon key not configured yet — Players tab (and Team tab\'s career-stats overlay) has no data source. Roster bio info on the Team tab still works. See CONFIG comment in this file.';
+    document.getElementById('playersResultsBar').textContent = 'Not configured — see warning above.';
+  } else {
+    loadPlayers();
+  }
+
+  // Team tab works off the Recruiting DB alone (roster_players), so it loads
+  // regardless of whether the Career DB key is configured yet.
+  recruitSupa.from('schools').select('id').eq('slug', 'uncw').single().then(function(res) {
+    if (res.error || !res.data) {
+      document.getElementById('teamResultsBar').textContent = 'Could not resolve UNCW school_id — see console.';
+      console.error(res.error);
+      return;
+    }
+    UNCW_SCHOOL_ID = res.data.id;
+    loadTeam();
+  });
+}
+
+// ── Players tab — reads Career DB directly (all ncaa_d1 players, not just
+// portal entries — matches Colin's "assess all players first" scoping) ────
+function loadPlayers() {
+  document.getElementById('playersResultsBar').textContent = 'Loading NCAA D1 players…';
+
+  // NOTE: this join shape is a best guess at what a real query will need —
+  // verify actual column/relationship names once B4 has run and real rows
+  // exist to inspect. player_stats has no FK to unified_players' name
+  // fields directly, so this likely needs 2-3 separate queries (stats,
+  // then unified_players by unified_id, then teams by team_id) rather than
+  // one PostgREST embedded-resource call, depending on how FKs are declared.
+  careerSupa.from('player_stats')
+    .select('*, unified_players(first,last), teams(name,conference,rpi_rank,conference_rpi)')
+    .eq('level', 'ncaa_d1')
+    .gte('minutes', 180)
+    .then(function(res) {
+      if (res.error) {
+        document.getElementById('playersResultsBar').textContent = 'Query error — see console (likely the join shape needs adjusting once real data exists).';
+        console.error(res.error);
+        return;
+      }
+      allPlayers = res.data || [];
+      populateConferenceFilter();
+      renderPlayers();
+    });
+}
+
+function populateConferenceFilter() {
+  var confs = Array.from(new Set(allPlayers.map(function(p) { return p.teams && p.teams.conference; }).filter(Boolean))).sort();
+  var sel = document.getElementById('fConf');
+  confs.forEach(function(c) {
+    var opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function renderPlayers() {
+  var pos = document.getElementById('fPos').value;
+  var conf = document.getElementById('fConf').value;
+  var q = document.getElementById('fSearch').value.toLowerCase();
+
+  var filtered = allPlayers.filter(function(p) {
+    if (pos && p.primary_pos !== pos) return false;
+    if (conf && (!p.teams || p.teams.conference !== conf)) return false;
+    if (q) {
+      var name = ((p.unified_players && (p.unified_players.first + ' ' + p.unified_players.last)) || '').toLowerCase();
+      var school = ((p.teams && p.teams.name) || '').toLowerCase();
+      if (name.indexOf(q) < 0 && school.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('playersResultsBar').textContent = filtered.length + ' players';
+
+  var html = filtered.map(function(p) {
+    var name = p.unified_players ? (p.unified_players.first + ' ' + p.unified_players.last) : 'Unknown';
+    var school = p.teams ? p.teams.name : '—';
+    var conf = p.teams ? p.teams.conference : '—';
+    return '<div class="player-row" onclick="openPlayerDetail(\'' + p.unified_id + '\')">' +
+      '<div class="pr-top"><div><span class="pos-pill">' + (p.primary_pos || '?') + '</span><span class="pr-name">' + name + '</span></div>' +
+      '<div class="pr-overall">' + (p.overall_composite != null ? p.overall_composite : '—') + '</div></div>' +
+      '<div class="pr-sub">' + school + ' · ' + conf + '</div>' +
+      '</div>';
+  }).join('');
+
+  document.getElementById('playersList').innerHTML = html || '<div class="loading-note">No players match these filters.</div>';
+}
+
+// ── Team tab — UNCW's own active roster ─────────────────────────────────
+var POS_ORDER = ['GK','CB','OB','DM','CM','AM','WF','CF'];
+var teamCareerByPlayer = {};  // unified_id -> array of {season, team_id, teamName, minutes, matches_played, goals, assists, shots}, sorted oldest->newest
+var teamRecruitProfile = {};  // ecnl_id -> {club, stars, notes} — pulled from the `ratings` table live, no schema change needed
+
+function loadTeam() {
+  document.getElementById('teamResultsBar').textContent = 'Loading roster…';
+  recruitSupa.from('roster_players').select('*').eq('school_id', UNCW_SCHOOL_ID).eq('is_active', true)
+    .then(function(res) {
+      if (res.error) {
+        document.getElementById('teamResultsBar').textContent = 'Query error — see console.';
+        console.error(res.error);
+        return;
+      }
+      var roster = res.data || [];
+      var linkedIds = roster.map(function(r) { return r.unified_id; }).filter(Boolean);
+      var ecnlIds = roster.map(function(r) { return r.ecnl_id; }).filter(Boolean);
+
+      var careerP = (careerSupa && linkedIds.length)
+        ? careerSupa.from('player_stats').select('unified_id,season,team_id,minutes,matches_played,goals,assists,shots').in('unified_id', linkedIds)
+        : Promise.resolve({ data: [] });
+
+      var teamsP = careerSupa
+        ? careerSupa.from('teams').select('id,name')
+        : Promise.resolve({ data: [] });
+
+      // Club/rating/notes — pulled live from the `ratings` table by ecnl_id, no
+      // schema change needed on roster_players. Takes the most recent rating
+      // per player if a coach logged more than one.
+      var ratingsP = ecnlIds.length
+        ? recruitSupa.from('ratings').select('player_id,player_club,stars,notes,match_date').in('player_id', ecnlIds)
+        : Promise.resolve({ data: [] });
+
+      Promise.all([careerP, teamsP, ratingsP]).then(function(results) {
+        var statsRes = results[0], teamsRes = results[1], ratingsRes = results[2];
+        var teamNames = {};
+        (teamsRes.data || []).forEach(function(t) { teamNames[t.id] = t.name; });
+
+        (statsRes.data || []).forEach(function(s) {
+          if (!teamCareerByPlayer[s.unified_id]) teamCareerByPlayer[s.unified_id] = [];
+          teamCareerByPlayer[s.unified_id].push({
+            season: s.season, team_id: s.team_id, teamName: teamNames[s.team_id] || ('team_id ' + s.team_id),
+            minutes: s.minutes, matches_played: s.matches_played, goals: s.goals, assists: s.assists, shots: s.shots
+          });
+        });
+        Object.keys(teamCareerByPlayer).forEach(function(uid) {
+          teamCareerByPlayer[uid].sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
+        });
+
+        (ratingsRes.data || []).forEach(function(r) {
+          // Keep the most recent rating per player.
+          var existing = teamRecruitProfile[r.player_id];
+          if (!existing || (r.match_date || '') > (existing.match_date || '')) {
+            teamRecruitProfile[r.player_id] = r;
+          }
+        });
+
+        renderTeam(roster);
+      });
+    });
+}
+
+function renderTeam(roster) {
+  document.getElementById('teamResultsBar').textContent = roster.length + ' active roster players';
+
+  var groups = {};
+  roster.forEach(function(r) {
+    var pos = r.position || '?';
+    if (!groups[pos]) groups[pos] = [];
+    groups[pos].push(r);
+  });
+
+  var order = POS_ORDER.filter(function(p) { return groups[p]; })
+    .concat(Object.keys(groups).filter(function(p) { return POS_ORDER.indexOf(p) < 0; }));
+
+  var html = order.map(function(pos) {
+    var players = groups[pos].sort(function(a, b) { return (a.last || '').localeCompare(b.last || ''); });
+    return '<div class="team-group-label">' + pos + '</div>' +
+      players.map(renderRosterCard).join('');
+  }).join('');
+
+  document.getElementById('teamList').innerHTML = html || '<div class="loading-note">No active roster players found.</div>';
+}
+
+function renderRosterCard(r) {
+  var name = r.first + ' ' + r.last;
+  var classBits = [r.class_year, r.grad_year ? ('grad ' + r.grad_year) : null].filter(Boolean).join(' · ');
+  var career = r.unified_id ? (teamCareerByPlayer[r.unified_id] || []) : [];
+  var profile = r.ecnl_id ? teamRecruitProfile[r.ecnl_id] : null;
+
+  var badge = r.unified_id
+    ? '<span class="rc-badge linked">Career DB linked</span>'
+    : '<span class="rc-badge no-data">No college stats yet</span>';
+
+  // Career-by-year section — one line per season, which school/club it was
+  // at, so a transfer's full path (and a current player's UNCW history) is
+  // visible at a glance rather than just the latest season's numbers.
+  var careerRows = '';
+  if (career.length) {
+    careerRows = '<div class="rc-career">' +
+      career.map(function(c) {
+        return '<div class="rc-career-row">' +
+          '<span class="rc-career-season">' + (c.season || '—') + '</span>' +
+          '<span class="rc-career-team">' + c.teamName + '</span>' +
+          '<span class="rc-career-line">' + (c.matches_played != null ? c.matches_played : '—') + ' GP · ' +
+          (c.minutes != null ? c.minutes : '—') + ' min' +
+          (c.goals ? ' · ' + c.goals + ' G' : '') + (c.assists ? ' · ' + c.assists + ' A' : '') +
+          '</span></div>';
+      }).join('') +
+      '</div>';
+  } else if (r.unified_id && careerSupa) {
+    careerRows = '<div class="rc-notes">Linked, but no season stats found yet.</div>';
+  }
+
+  // Recruiting profile section — club + our own scouting rating, for anyone
+  // who doesn't have college stats yet (incoming freshmen/true first-years)
+  // so their card isn't empty. Pulled live from the `ratings` table by
+  // ecnl_id, same data the recruiting app already shows on Player Search.
+  var profileBlock = '';
+  if (!career.length && profile) {
+    profileBlock = '<div class="rc-profile">' +
+      (profile.player_club ? '<div class="rc-profile-club">Club: ' + profile.player_club + '</div>' : '') +
+      '<div class="rc-profile-rating">Recruiting rating: ' + (profile.stars != null ? profile.stars.toFixed(1) + '★' : '—') + '</div>' +
+      (profile.notes ? '<div class="rc-notes">' + profile.notes + '</div>' : '') +
+      '</div>';
+  } else if (!career.length && !profile) {
+    profileBlock = '<div class="rc-notes">No club/rating on file yet.</div>';
+  }
+
+  return '<div class="roster-card">' +
+    '<div class="rc-top"><div class="rc-name">' + name + badge + '</div>' +
+    '<div class="rc-rating">' + (r.staff_rating != null ? r.staff_rating.toFixed(1) : '—') + '</div></div>' +
+    '<div class="rc-sub">' + classBits + (r.scholarship_type ? ' · ' + r.scholarship_type.replace('_',' ') : '') + '</div>' +
+    (r.notes ? '<div class="rc-notes">' + r.notes + '</div>' : '') +
+    careerRows + profileBlock +
+    '</div>';
+}
+
+function openPlayerDetail(unifiedId) {
+  // TODO: full detail rendering — badges/percentiles/radar comparison,
+  // reusing ⚙️ Scripts/transfer_stat_profiles.py's BADGE_STAT_PROFILES +
+  // compute_badge_percentiles()/compute_composite_score() output once that
+  // scoring runs as a batch job and writes results somewhere this app can
+  // read (same pattern as player_position_fit). For now this is a stub so
+  // the navigation flow is real and clickable.
+  document.getElementById('playerDetailBody').innerHTML =
+    '<div class="loading-note">Detail view not wired yet — needs the batch scoring job (transfer_stat_profiles.py) to write percentile/composite results somewhere this screen can query. Player: ' + unifiedId + '</div>';
+  showScreen('PlayerDetail');
+}
+</script>
+</body>
+</html>

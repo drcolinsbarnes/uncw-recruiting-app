@@ -261,9 +261,27 @@ var allPlayers = []; // cached ncaa_d1 player rows for the Players tab
 function sendMagicLink() {
   var email = document.getElementById('loginEmail').value.trim();
   if (!email) return;
-  recruitSupa.auth.signInWithOtp({ email: email }).then(function(res) {
-    document.getElementById('loginSent').style.display = 'block';
-  });
+  // shouldCreateUser:false — Supabase's signInWithOtp DEFAULTS TO TRUE, which
+  // means anyone who reaches this page could type any address and self-register
+  // as an auth user. School-scoped RLS means a stranger would see zero rows
+  // (current_school_id() resolves via the coaches table and comes back NULL for
+  // anyone Colin hasn't added), but they'd still exist as a user in the project.
+  // Closed Aug 1, 2026 at Colin's request: accounts are created by Colin only.
+  recruitSupa.auth.signInWithOtp({ email: email, options: { shouldCreateUser: false } })
+    .then(function(res) {
+      if (res.error) {
+        // Supabase returns "Signups not allowed for otp" for an unknown address.
+        var msg = /not allowed|not found/i.test(res.error.message || '')
+          ? 'That email isn\'t registered. Ask Colin to add you.'
+          : 'Error: ' + res.error.message;
+        var el = document.getElementById('loginSent');
+        el.style.display = 'block';
+        el.style.color = 'var(--red)';
+        el.textContent = msg;
+        return;
+      }
+      document.getElementById('loginSent').style.display = 'block';
+    });
 }
 
 recruitSupa.auth.onAuthStateChange(function(event, session) {
@@ -395,6 +413,12 @@ var teamRecruitProfile = {};  // ecnl_id -> {club, stars, notes} — pulled from
 
 function loadTeam() {
   document.getElementById('teamResultsBar').textContent = 'Loading roster…';
+  // Reset caches — onAuthStateChange fires more than once (INITIAL_SESSION,
+  // SIGNED_IN, TOKEN_REFRESHED), so boot()/loadTeam() can run repeatedly. Without
+  // this, each run APPENDS the same seasons again and every player's career
+  // history showed 2024 twice, 2025 twice (found Aug 1, 2026).
+  teamCareerByPlayer = {};
+  teamRecruitProfile = {};
   recruitSupa.from('roster_players').select('*').eq('school_id', UNCW_SCHOOL_ID).eq('is_active', true)
     .then(function(res) {
       if (res.error) {

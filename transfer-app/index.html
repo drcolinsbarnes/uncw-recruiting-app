@@ -216,7 +216,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v0.6 · team badges + real FA2024</div>
+        <div class="sub">Women's Soccer · v0.7 · team badges + dupe-season fix</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -370,11 +370,19 @@ function sendMagicLink() {
     });
 }
 
+// _booted guard: onAuthStateChange fires for INITIAL_SESSION, SIGNED_IN and
+// again on every TOKEN_REFRESHED (roughly hourly). Without this, boot() re-ran
+// and every data load fired again — wasted queries, and the source of the
+// duplicated career seasons. Same pattern the recruiting app already uses
+// (_appLoaded). Show/hide still runs each time; only the data load is guarded.
+var _booted = false;
 recruitSupa.auth.onAuthStateChange(function(event, session) {
   if (session) {
     document.getElementById('screenLogin').style.display = 'none';
     document.getElementById('mainApp').style.display = 'flex';
-    boot();
+    if (!_booted) { _booted = true; boot(); }
+  } else {
+    _booted = false;
   }
 });
 
@@ -698,12 +706,6 @@ var teamRecruitProfile = {};  // ecnl_id -> {club, stars, notes} — pulled from
 
 function loadTeam() {
   document.getElementById('teamResultsBar').textContent = 'Loading roster…';
-  // Reset caches — onAuthStateChange fires more than once (INITIAL_SESSION,
-  // SIGNED_IN, TOKEN_REFRESHED), so boot()/loadTeam() can run repeatedly. Without
-  // this, each run APPENDS the same seasons again and every player's career
-  // history showed 2024 twice, 2025 twice (found Aug 1, 2026).
-  teamCareerByPlayer = {};
-  teamRecruitProfile = {};
   recruitSupa.from('roster_players').select('*').eq('school_id', UNCW_SCHOOL_ID).eq('is_active', true)
     .then(function(res) {
       if (res.error) {
@@ -735,25 +737,41 @@ function loadTeam() {
         var teamNames = {};
         (teamsRes.data || []).forEach(function(t) { teamNames[t.id] = t.name; });
 
+        // Accumulate into LOCAL objects, then assign once at the end.
+        //
+        // The previous version reset the shared teamCareerByPlayer at the top of
+        // loadTeam() and pushed into it here. That reset is synchronous but the
+        // push is inside an async callback, so two overlapping loadTeam() calls
+        // interleaved as: A resets, B resets, A pushes, B pushes — and every
+        // season appeared twice. onAuthStateChange fires repeatedly
+        // (INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED), so overlapping calls are
+        // the norm, not an edge case. This is why the "2023, 2023, 2024, 2024,
+        // 2025, 2025" duplication survived the first fix on Aug 1, 2026 — the
+        // reset was in the wrong place, not missing. Building locally makes the
+        // race impossible rather than merely unlikely.
+        var career = {}, profiles = {};
+
         (statsRes.data || []).forEach(function(s) {
-          if (!teamCareerByPlayer[s.unified_id]) teamCareerByPlayer[s.unified_id] = [];
-          teamCareerByPlayer[s.unified_id].push({
+          if (!career[s.unified_id]) career[s.unified_id] = [];
+          career[s.unified_id].push({
             season: s.season, team_id: s.team_id, teamName: teamNames[s.team_id] || ('team_id ' + s.team_id),
             minutes: s.minutes, matches_played: s.matches_played, goals: s.goals, assists: s.assists, shots: s.shots
           });
         });
-        Object.keys(teamCareerByPlayer).forEach(function(uid) {
-          teamCareerByPlayer[uid].sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
+        Object.keys(career).forEach(function(uid) {
+          career[uid].sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
         });
 
         (ratingsRes.data || []).forEach(function(r) {
           // Keep the most recent rating per player.
-          var existing = teamRecruitProfile[r.player_id];
+          var existing = profiles[r.player_id];
           if (!existing || (r.match_date || '') > (existing.match_date || '')) {
-            teamRecruitProfile[r.player_id] = r;
+            profiles[r.player_id] = r;
           }
         });
 
+        teamCareerByPlayer = career;
+        teamRecruitProfile = profiles;
         renderTeam(roster);
       });
     });

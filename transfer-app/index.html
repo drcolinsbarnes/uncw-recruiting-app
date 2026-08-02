@@ -165,8 +165,8 @@ body {
    should be sortable by clicking on the column." Horizontal scroll because
    this is a phone-width app and a stat table can't fit otherwise. */
 .table-wrap { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
-.ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: max-content; min-width: 100%; }
-.ptable th, .ptable td { padding: 6px 7px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
+.ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: auto; }
+.ptable th, .ptable td { padding: 6px 4px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
 .ptable th {
   position: sticky; top: 0; z-index: 3; background: var(--navy); color: #fff;
   font-size: 10px; font-weight: 700; cursor: pointer; user-select: none;
@@ -177,7 +177,8 @@ body {
 /* Name column pinned left so it stays visible while scrolling stats sideways. */
 .ptable th.col-name, .ptable td.col-name {
   position: sticky; left: 0; text-align: left; z-index: 2; background: #fff;
-  border-right: 1px solid var(--border); max-width: 132px; overflow: hidden; text-overflow: ellipsis;
+  border-right: 1px solid var(--border); width: 100%; max-width: 0;
+  overflow: hidden; text-overflow: ellipsis; padding-left: 8px;
 }
 .ptable th.col-name { z-index: 4; background: var(--navy); }
 .ptable tbody tr:nth-child(even) td { background: #fafbfc; }
@@ -185,6 +186,12 @@ body {
 .ptable tbody tr:hover td { background: #e6f7f7; cursor: pointer; }
 .ptable tbody tr:hover td.col-name { background: #e6f7f7; }
 .ptable td.col-name b { color: var(--navy); font-size: 12px; }
+.ptable td.col-name .sub { font-size: 9px; margin-top: 1px; }
+.ptable td.col-name .pos-tag { font-size: 8px; padding: 1px 4px; margin-right: 4px; }
+.clear-btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  color: var(--muted); cursor: pointer; }
+.clear-btn:hover { border-color: var(--teal); color: var(--teal); }
 .ptable td .sub { color: var(--muted); font-size: 10px; }
 .ptable td.rating { font-weight: 800; color: var(--navy); font-size: 12px; }
 .ptable td.rank { color: var(--muted); }
@@ -238,7 +245,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v0.9 · level-adjusted ratings</div>
+        <div class="sub">Women's Soccer · v1.0 · mobile-fit list</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -287,7 +294,8 @@ body {
           </select>
         </div>
         <div class="filter-row">
-          <input type="text" id="fSearch" placeholder="Search by name or school…" oninput="renderPlayers()">
+          <input type="text" id="fSearch" placeholder="Search name or school…" oninput="renderPlayers()">
+          <button class="clear-btn" onclick="clearFilters()">Clear</button>
         </div>
       </div>
       <div class="results-bar" id="playersResultsBar">Loading…</div>
@@ -584,6 +592,21 @@ function populateConferenceFilter() {
     confs.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
 }
 
+// Reset every filter back to its default and re-render (Colin, Aug 1, 2026).
+// Season goes back to the current season, minutes back to the 450 qualifying
+// floor — not to "any", since unrated players aren't a useful default view.
+function clearFilters() {
+  document.getElementById('fSeason').value = CURRENT_SEASON;
+  document.getElementById('fPos').value    = '';
+  document.getElementById('fConf').value   = '';
+  document.getElementById('fTier').value   = '';
+  document.getElementById('fMin').value    = '450';
+  document.getElementById('fRpi').value    = '';
+  document.getElementById('fSearch').value = '';
+  sortKey = 'composite_adj'; sortDir = -1;
+  renderPlayers();
+}
+
 function filteredPlayers() {
   var season = document.getElementById('fSeason').value;
   var pos    = document.getElementById('fPos').value;
@@ -655,16 +678,17 @@ function renderPlayers() {
   // Ranks (national/conference/team) are deliberately NOT columns here — Colin,
   // Aug 1, 2026: too much clutter on the list. They live on the player badge,
   // where there's room to label them properly.
+  // One identity column (position + name + school/conference abbreviations),
+  // then only the counting stats. Colin, Aug 1, 2026: the school column was the
+  // widest and least interesting, the raw rating isn't needed on the list, and
+  // everything must fit a phone without sideways scrolling.
   var cols = [
-    { k: 'name',            t: 'Player',  cls: 'col-name' },
-    { k: 'school',          t: 'School'  },
-    { k: 'composite_adj',   t: 'Rating'  },
-    { k: 'composite',       t: 'Raw'     },
-    { k: 'matches_played',  t: 'GP'      },
-    { k: 'matches_started', t: 'GS'      },
-    { k: 'minutes',         t: 'Min'     },
-    { k: 'goals',           t: 'G'       },
-    { k: 'assists',         t: 'A'       }
+    { k: 'name',            t: 'Player', cls: 'col-name' },
+    { k: 'composite_adj',   t: 'Rtg'   },
+    { k: 'matches_played',  t: 'GP'    },
+    { k: 'minutes',         t: 'Min'   },
+    { k: 'goals',           t: 'G'     },
+    { k: 'assists',         t: 'A'     }
   ];
   if (pos && BADGE_COLS[pos]) {
     BADGE_COLS[pos].forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
@@ -682,25 +706,18 @@ function renderPlayers() {
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';
     var cells = cols.map(function(c) {
       if (c.k === 'name') {
-        return '<td class="col-name"><span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b></td>';
-      }
-      if (c.k === 'school') {
-        return '<td style="text-align:left"><div>' + (t.name || '—') + '</div>' +
-          '<div class="sub">' + (t.conference || '—') +
-          (t.tier ? ' <span class="tier-tag ' + tierCls + '">' + t.tier + '</span>' : '') +
-          (t.rpi_rank ? ' RPI ' + t.rpi_rank : '') + '</div></td>';
+        // teams.abbreviation / conference_short are already in the DB — use them
+        // rather than full names, which is what forced horizontal scrolling.
+        var sch = t.abbreviation || (t.name ? t.name.slice(0, 12) : '—');
+        var cf  = t.conference_short || '';
+        return '<td class="col-name">' +
+          '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
+          '<div class="sub">' + sch + (cf ? ' · ' + cf : '') + '</div></td>';
       }
       if (c.k === 'composite_adj') {
         return p.composite_adj == null
           ? '<td class="unrated">n/a</td>'
           : '<td class="rating">' + p.composite_adj.toFixed(1) + '</td>';
-      }
-      if (c.k === 'composite') {
-        // Raw, unadjusted — shown alongside so the size of the level
-        // adjustment is always visible rather than hidden in one number.
-        return p.composite == null
-          ? '<td class="unrated">—</td>'
-          : '<td class="raw-rating">' + p.composite.toFixed(1) + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
@@ -711,6 +728,9 @@ function renderPlayers() {
         return '<td>' + b.v.toFixed(2) + (b.nat != null ? '<div class="sub">' + Math.round(b.nat) + 'th</div>' : '') + '</td>';
       }
       var v = p[c.k];
+      if (c.k === 'minutes' && v != null && v >= 1000) {
+        return '<td>' + (v / 1000).toFixed(1) + 'k</td>';
+      }
       return '<td>' + (v == null ? '—' : v) + '</td>';
     }).join('');
     return '<tr onclick="openPlayerDetail(\'' + p.unified_id + '\',\'' + p.season + '\',' + (p.team_id || 'null') + ')">' + cells + '</tr>';

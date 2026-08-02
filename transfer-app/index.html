@@ -196,6 +196,28 @@ body {
 .tier-Mid { background: #e0f2fe; color: #0369a1; }
 .tier-Low { background: var(--border); color: var(--muted); }
 .unrated { color: var(--muted); font-style: italic; }
+.ptable td.raw-rating { color: var(--muted); font-size: 11px; }
+
+/* ── Player badge — matches the v0.1 preview layout Colin approved ──────── */
+.overall-note { font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
+.fit-note { font-size: 11px; color: var(--muted); }
+.scout-flag { background: #e6f7f7; border: 1px solid var(--teal); color: var(--navy);
+  font-size: 11px; font-weight: 600; padding: 5px 8px; border-radius: 8px; margin-top: 8px; }
+.section-title { font-size: 12px; font-weight: 800; color: var(--navy); text-transform: uppercase;
+  letter-spacing: .03em; margin: 16px 0 8px; padding-bottom: 5px; border-bottom: 2px solid var(--navy); }
+.badges-section .section-title:first-child { margin-top: 0; }
+.pct-scope-lbl { font-size: 9px; }
+.hist-wrap { overflow-x: auto; }
+.hist { border-collapse: collapse; font-size: 11px; width: 100%; min-width: 100%; }
+.hist th { background: var(--bg); color: var(--muted); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .03em; padding: 5px 6px; text-align: right; white-space: nowrap;
+  border-bottom: 1px solid var(--border); }
+.hist td { padding: 6px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.hist th:first-child, .hist td:first-child,
+.hist th.school, .hist td.school { text-align: left; }
+.hist td.school { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.hist tr.cur td { background: #e6f7f7; font-weight: 700; }
+.hist-note { font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -216,7 +238,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v0.8 · leaner players list</div>
+        <div class="sub">Women's Soccer · v0.9 · level-adjusted ratings</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -450,7 +472,7 @@ function boot() {
 // columns that have never existed — which is why the position filter returned
 // 0 players and no ratings ever rendered.
 var teamsById = {};
-var sortKey = 'composite';
+var sortKey = 'composite_adj';
 var sortDir = -1;          // -1 = descending; rating high-to-low is the default
 var PAGE = 1000;           // PostgREST hard-caps every request at 1000 rows
 
@@ -486,7 +508,7 @@ function fetchRatingsPage(offset, acc) {
   document.getElementById('playersResultsBar').textContent =
     'Loading players… ' + acc.length;
   careerSupa.from('player_transfer_ratings')
-    .select('unified_id,season,team_id,primary_pos,composite,rank_nat,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
+    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
     .range(offset, offset + PAGE - 1)
     .then(function(res) {
       if (res.error) {
@@ -622,7 +644,7 @@ function renderPlayers() {
     return (x - y) * sortDir;
   });
 
-  var rated  = rows.filter(function(r) { return r.composite != null; }).length;
+  var rated  = rows.filter(function(r) { return r.composite_adj != null; }).length;
   var season = document.getElementById('fSeason').value;
   document.getElementById('playersResultsBar').textContent =
     rows.length + ' players · ' + rated + ' rated' +
@@ -636,7 +658,8 @@ function renderPlayers() {
   var cols = [
     { k: 'name',            t: 'Player',  cls: 'col-name' },
     { k: 'school',          t: 'School'  },
-    { k: 'composite',       t: 'Rating'  },
+    { k: 'composite_adj',   t: 'Rating'  },
+    { k: 'composite',       t: 'Raw'     },
     { k: 'matches_played',  t: 'GP'      },
     { k: 'matches_started', t: 'GS'      },
     { k: 'minutes',         t: 'Min'     },
@@ -667,10 +690,17 @@ function renderPlayers() {
           (t.tier ? ' <span class="tier-tag ' + tierCls + '">' + t.tier + '</span>' : '') +
           (t.rpi_rank ? ' RPI ' + t.rpi_rank : '') + '</div></td>';
       }
-      if (c.k === 'composite') {
-        return p.composite == null
+      if (c.k === 'composite_adj') {
+        return p.composite_adj == null
           ? '<td class="unrated">n/a</td>'
-          : '<td class="rating">' + p.composite.toFixed(1) + '</td>';
+          : '<td class="rating">' + p.composite_adj.toFixed(1) + '</td>';
+      }
+      if (c.k === 'composite') {
+        // Raw, unadjusted — shown alongside so the size of the level
+        // adjustment is always visible rather than hidden in one number.
+        return p.composite == null
+          ? '<td class="unrated">—</td>'
+          : '<td class="raw-rating">' + p.composite.toFixed(1) + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
@@ -955,28 +985,44 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
 
   var html = '';
 
-  // ── header ──
+  // ── header: name, school + conference + both RPI figures, listed position ──
   html += '<div class="player-header">' +
-    '<div class="player-name"><span class="pos-tag">' + (pos || '?') + '</span>' + p._name + '</div>' +
+    '<div class="player-name">' + p._name + '</div>' +
     '<div class="player-sub">' + (t.name || 'Unknown school') + ' · ' + (t.conference || '—') +
-      (t.tier ? ' · <b>' + t.tier + '</b>' : '') + '</div>' +
-    '<div class="player-sub">' + p.season +
-      (t.rpi_rank ? ' · Team RPI #' + t.rpi_rank : '') +
-      (t.conference_rpi ? ' · Conf RPI #' + t.conference_rpi : '') + '</div>' +
+      ((t.rpi_rank || t.conference_rpi)
+        ? ' <span style="white-space:nowrap">(' +
+            (t.rpi_rank ? 'Team RPI #' + t.rpi_rank : '') +
+            (t.rpi_rank && t.conference_rpi ? ' · ' : '') +
+            (t.conference_rpi ? 'Conf RPI #' + t.conference_rpi : '') + ')</span>'
+        : '') + '</div>' +
+    '<div class="player-sub" style="margin-top:5px">' +
+      '<span class="pos-tag">' + (pos || '?') + '</span>' +
+      (p.listed_pos_raw ? '<span class="fit-note">Listed: ' + p.listed_pos_raw + '</span>' : '') +
+      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') +
+    '</div>' +
+    profileFlag(p, roster) +
     '<div class="overall-score">' +
-      '<div><div class="num">' + (p.composite != null ? p.composite.toFixed(1) : 'n/a') + '</div>' +
-      '<div class="lbl">Overall rating</div></div>' +
+      '<div><div class="num">' + (p.composite_adj != null ? p.composite_adj.toFixed(0)
+                                   : (p.composite != null ? p.composite.toFixed(0) : 'n/a')) + '</div>' +
+      '<div class="lbl">Overall</div></div>' +
       '<div style="flex:1;text-align:right;font-size:11px;line-height:1.5">' +
-        rankLine('National', p.rank_nat, p.n_nat) +
+        rankLine('National', p.rank_nat_adj != null ? p.rank_nat_adj : p.rank_nat, p.n_nat) +
         rankLine('Conference', p.rank_conf, p.n_conf) +
         rankLine('Team', p.rank_team, p.n_team) +
       '</div></div>' +
+    overallExplainer(p, pos, t) +
     '</div>';
 
   // ── universal stats ──
+  // "Starts" is in the approved template but is NOT in the Wyscout export —
+  // only 16 of 15,367 rows have matches_started, all hand-entered box scores.
+  // Min/GP answers the same question (is she a starter?) from data we actually
+  // have: ~90 means a full-time starter, ~30 means a sub.
+  var mpg = (p.minutes != null && p.matches_played) ? Math.round(p.minutes / p.matches_played) : null;
   html += '<div class="universal-stats">' +
-    ustat(p.matches_played, 'GP') + ustat(p.matches_started, 'GS') +
-    ustat(p.minutes, 'Min') + ustat(p.goals, 'G') + ustat(p.assists, 'A') +
+    ustat(p.matches_played, 'GP') + ustat(mpg, 'Min/GP') +
+    ustat(p.minutes != null ? p.minutes.toLocaleString() : null, 'Min') +
+    ustat(p.goals, 'Gls') + ustat(p.assists, 'Ast') +
     '</div>';
 
   html += '<div class="badges-section">';
@@ -1012,7 +1058,10 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
             '</div>';
   }
 
-  // ── badge stats with 3-scope percentile bars ──
+  // ── Position Profile — each badge stat with all three percentile scopes,
+  // labelled the way the approved template reads: team scope is all positions
+  // (with its pool size), conference and national are same-position only.
+  html += '<div class="section-title">Position Profile — ' + (pos || '?') + '</div>';
   order.forEach(function(key) {
     var b = badges[key];
     if (!b) return;
@@ -1020,31 +1069,95 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '<div class="badge-top"><div class="badge-label">' + b.label +
         (b.dir === 'low' ? ' <span style="color:var(--muted);font-weight:400">(lower is better)</span>' : '') +
         '</div>' +
-        '<div class="badge-value">' + (b.v == null ? '—' : b.v.toFixed(2)) + '</div></div>' +
+        '<div class="badge-value">' + (b.v == null ? '—' : b.v.toFixed(b.v >= 10 ? 1 : 2)) + '</div></div>' +
       '<div class="pct-scopes">' +
-        pctScope('Team', b.team) + pctScope('Conf', b.conf) + pctScope('Nat', b.nat) +
+        pctScope('Team (all pos)', b.team, p.n_team) +
+        pctScope('Conference (' + pos + ')', b.conf, null) +
+        pctScope('National (' + pos + ')', b.nat, null) +
       '</div></div>';
   });
 
-  // ── career history ──
+  // ── Season-by-School history, as a table (matches the template) ──
   if (rowsForPlayer.length) {
-    html += '<div class="badge-label" style="margin:14px 0 6px">Career</div>';
-    rowsForPlayer.forEach(function(r) {
-      var rt = teamsById[r.team_id] || {};
-      html += '<div class="rc-career-row"' + (r === p ? ' style="background:#e6f7f7;border-radius:6px"' : '') + '>' +
-        '<span class="rc-career-season">' + r.season + '</span>' +
-        '<span class="rc-career-team">' + (rt.name || '—') + '</span>' +
-        '<span class="rc-career-line">' +
-          (r.composite != null ? '<b>' + r.composite.toFixed(1) + '</b> · ' : '') +
-          (r.matches_played != null ? r.matches_played + ' GP · ' : '') +
-          (r.minutes != null ? r.minutes + ' min' : '') +
-          (r.goals ? ' · ' + r.goals + 'G' : '') + (r.assists ? ' · ' + r.assists + 'A' : '') +
-        '</span></div>';
-    });
+    var keyStat = order.length ? order[0] : null;
+    var keyLbl  = keyStat && badges[keyStat] ? shortLabel(badges[keyStat].label) : '';
+    html += '<div class="section-title">Season-by-School History</div>' +
+      '<div class="hist-wrap"><table class="hist">' +
+      '<thead><tr><th>Season</th><th>School</th><th>Conf</th>' +
+      '<th>GP</th><th>Min</th><th>Gls</th><th>Ast</th>' +
+      (keyLbl ? '<th>' + keyLbl + '</th>' : '') + '</tr></thead><tbody>' +
+      rowsForPlayer.map(function(r) {
+        var rt = teamsById[r.team_id] || {};
+        var ks = keyStat && r.badge_stats ? r.badge_stats[keyStat] : null;
+        return '<tr' + (r === p ? ' class="cur"' : '') + '>' +
+          '<td>' + r.season + '</td>' +
+          '<td class="school">' + (rt.name || '—') + '</td>' +
+          '<td>' + (rt.conference_short || rt.conference || '—') + '</td>' +
+          '<td>' + (r.matches_played != null ? r.matches_played : '—') + '</td>' +
+          '<td>' + (r.minutes != null ? r.minutes.toLocaleString() : '—') + '</td>' +
+          '<td>' + (r.goals != null ? r.goals : '—') + '</td>' +
+          '<td>' + (r.assists != null ? r.assists : '—') + '</td>' +
+          (keyLbl ? '<td>' + (ks && ks.v != null ? ks.v.toFixed(2) : '—') + '</td>' : '') +
+          '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="hist-note">Rating shown is level-adjusted. Raw (unadjusted) rating this season: ' +
+        (p.composite != null ? p.composite.toFixed(1) : 'n/a') +
+        (p.team_strength != null ? ' · team strength ' + (p.team_strength * 100).toFixed(0) + '/100' : '') +
+        (p.adj_capped ? ' · <b>adjustment capped</b>' : '') + '</div>';
   }
 
   html += '</div>';
   body.innerHTML = html;
+}
+
+// Plain-English explanation of what the Overall number is, built from the
+// position's actual top-weighted stats rather than a canned sentence.
+function overallExplainer(p, pos, t) {
+  if (p.composite_adj == null && p.composite == null) return '';
+  var b = p.badge_stats || {};
+  var top = Object.keys(b).sort(function(x, y) { return (b[y].w || 0) - (b[x].w || 0); })
+                   .slice(0, 2).map(function(k) { return b[k].label.replace(/\/90$/, ''); });
+  var v = p.composite_adj != null ? p.composite_adj : p.composite;
+  var band = v >= 85 ? 'Elite' : v >= 70 ? 'Top-quartile' : v >= 55 ? 'Above-average'
+           : v >= 45 ? 'Average' : v >= 30 ? 'Below-average' : 'Bottom-tier';
+  var adjNote = '';
+  if (p.composite_adj != null && p.composite != null) {
+    var d = p.composite_adj - p.composite;
+    adjNote = Math.abs(d) < 0.5 ? '' :
+      ' Adjusted ' + (d > 0 ? '+' : '') + d.toFixed(1) + ' for level of competition' +
+      (t && t.rpi_rank ? ' (team RPI #' + t.rpi_rank + ')' : '') + '.';
+  }
+  return '<div class="overall-note">National composite across her ' +
+    Object.keys(b).length + ' ' + (pos || '') + ' stats' +
+    (top.length ? ', weighted toward ' + top.join(' and ') : '') + '. ' +
+    band + ' ' + posWord(pos) + ' nationally at her position.' + adjNote + '</div>';
+}
+
+function posWord(pos) {
+  return ({ GK: 'goalkeeper', CB: 'defender', OB: 'defender', DM: 'midfielder',
+            CM: 'midfielder', AM: 'midfielder', WF: 'attacker', CF: 'forward' })[pos] || 'player';
+}
+
+function shortLabel(l) {
+  return l.replace('Successful Defensive Actions', 'SDA').replace('Successful Attacking Actions', 'SAA')
+          .replace('Aerial Duels Won', 'AerW').replace('Progressive Passes', 'ProgP')
+          .replace('Successful Crosses', 'SCrs').replace('Pass Accuracy %', 'Pass%')
+          .replace('Save %', 'Sv%').replace(' per 90', '/90');
+}
+
+// "Formerly scouted by UNCW" — only rendered when we genuinely have a link.
+// Opposition players aren't matched to the Recruiting DB yet (that's B13), so
+// this stays silent for them rather than implying we have history we don't.
+function profileFlag(p, roster) {
+  if (!roster) return '';
+  var prof = roster.ecnl_id ? teamRecruitProfile[roster.ecnl_id] : null;
+  var bits = [];
+  if (roster.staff_rating != null) bits.push('staff rating ' + roster.staff_rating.toFixed(1));
+  if (prof && prof.stars != null) bits.push('scouted ' + prof.stars.toFixed(1) + '★' +
+      (prof.match_date ? ' (' + prof.match_date + ')' : ''));
+  if (prof && prof.player_club) bits.push(prof.player_club);
+  if (!bits.length) return '';
+  return '<div class="scout-flag">On our roster — ' + bits.join(' · ') + '</div>';
 }
 
 function ustat(v, k) {
@@ -1056,12 +1169,20 @@ function rankLine(label, rank, n) {
   return '<div>' + label + ' <b>#' + rank + '</b> <span style="opacity:.7">of ' + (n || '?') + '</span></div>';
 }
 
-function pctScope(label, val) {
+function ordinal(n) {
+  n = Math.round(n);
+  var s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function pctScope(label, val, n) {
   var v = (val == null) ? 0 : val;
   // Colour by strength so the bar reads at a glance rather than needing the number.
   var col = v >= 80 ? 'var(--green)' : v >= 60 ? 'var(--teal)' : v >= 40 ? 'var(--gold)' : 'var(--orange)';
   return '<div class="pct-scope">' +
-    '<div class="pct-scope-lbl"><span>' + label + '</span><span>' + (val == null ? '—' : Math.round(val)) + '</span></div>' +
+    '<div class="pct-scope-lbl"><span>' + label + '</span>' +
+      '<span><b>' + (val == null ? '—' : ordinal(val)) + '</b>' +
+      (n ? ' <span style="opacity:.7">n=' + n + '</span>' : '') + '</span></div>' +
     '<div class="pct-bar-track"><div class="pct-bar-fill" style="width:' + v + '%;background:' + (val == null ? 'var(--border)' : col) + '"></div></div>' +
     '</div>';
 }

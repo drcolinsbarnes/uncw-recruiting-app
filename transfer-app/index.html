@@ -118,6 +118,24 @@ body {
   letter-spacing: .04em; padding: 10px 4px 4px; }
 .roster-card { background: #fff; border: 1px solid var(--border); border-radius: 10px;
   padding: 10px 12px; margin-bottom: 8px; }
+/* Slim roster row — jersey, name, class, rating, chevron. Everything else moved
+   into the tap-through badge (Colin, Aug 1, 2026). */
+.roster-card.slim { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  margin-bottom: 6px; cursor: pointer; }
+.roster-card.slim:hover { border-color: var(--teal); background: #f4fbfb; }
+.rc-jersey { width: 26px; text-align: center; font-size: 13px; font-weight: 800;
+  color: var(--muted); flex-shrink: 0; }
+.rc-main { flex: 1; min-width: 0; }
+.roster-card.slim .rc-name { font-size: 13px; font-weight: 700; color: var(--navy);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roster-card.slim .rc-sub { font-size: 10px; margin-top: 1px; }
+.roster-card.slim .rc-rating { font-size: 16px; font-weight: 800; color: var(--navy);
+  text-align: center; line-height: 1; flex-shrink: 0; }
+.roster-card.slim .rc-rating.alt  { color: var(--teal); }
+.roster-card.slim .rc-rating.none { color: var(--border); }
+.rc-rating-lbl { font-size: 8px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; margin-top: 2px; }
+.rc-chev { color: var(--border); font-size: 18px; flex-shrink: 0; }
 .rc-top { display: flex; justify-content: space-between; align-items: baseline; }
 .rc-name { font-weight: 700; font-size: 14px; color: var(--navy); }
 .rc-rating { font-weight: 800; font-size: 14px; color: var(--navy); }
@@ -198,7 +216,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v0.5 · sortable players + ratings</div>
+        <div class="sub">Women's Soccer · v0.6 · team badges + real FA2024</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -498,11 +516,35 @@ function attachNames() {
   chunk(0);
 }
 
+// ── Active-season pool (Colin, Aug 1, 2026) ──────────────────────────────
+// "Players should only be listed in the app for 2025. If player doesn't show
+// up in 2025, then do not show." A player with no current-season row has
+// graduated or left college soccer, so she isn't a transfer target no matter
+// how good her older numbers look. Her PRIOR seasons still show on her badge —
+// this gates who appears in the list, not what history you can see once you
+// open someone.
+//
+// CURRENT_SEASON is derived, not hard-coded: it's the newest season present in
+// the data. When the 2026 stats land in December, the pool becomes 2026 players
+// automatically and 2025 drops to being history — no code change needed, which
+// is exactly the handover Colin described.
+var CURRENT_SEASON = null;
+var activePool = {};   // unified_id -> true if the player has a CURRENT_SEASON row
+
 function populateSeasonFilter() {
   var seasons = Array.from(new Set(allPlayers.map(function(p) { return p.season; }).filter(Boolean))).sort().reverse();
+  CURRENT_SEASON = seasons[0] || null;
+
+  activePool = {};
+  allPlayers.forEach(function(p) {
+    if (p.season === CURRENT_SEASON) activePool[p.unified_id] = true;
+  });
+
   var sel = document.getElementById('fSeason');
-  sel.innerHTML = seasons.map(function(s) { return '<option value="' + s + '">' + s + '</option>'; }).join('');
-  if (seasons.length) sel.value = seasons[0];   // newest season by default
+  sel.innerHTML = seasons.map(function(s) {
+    return '<option value="' + s + '">' + s + (s === CURRENT_SEASON ? ' (current)' : ' stats') + '</option>';
+  }).join('');
+  sel.value = CURRENT_SEASON;
 }
 
 function populateConferenceFilter() {
@@ -523,6 +565,11 @@ function filteredPlayers() {
 
   return allPlayers.filter(function(p) {
     var t = teamsById[p.team_id];
+    // Gate on the CURRENT season regardless of which season's stats are being
+    // viewed: selecting 2024 shows those players' 2024 numbers, but only for
+    // players still active in 2025. Anyone whose career ended before the
+    // current season never appears.
+    if (!activePool[p.unified_id]) return false;
     if (season && p.season !== season) return false;
     if (pos && p.primary_pos !== pos) return false;
     if (conf && (!t || t.conference !== conf)) return false;
@@ -567,10 +614,12 @@ function renderPlayers() {
     return (x - y) * sortDir;
   });
 
-  var rated = rows.filter(function(r) { return r.composite != null; }).length;
+  var rated  = rows.filter(function(r) { return r.composite != null; }).length;
+  var season = document.getElementById('fSeason').value;
   document.getElementById('playersResultsBar').textContent =
     rows.length + ' players · ' + rated + ' rated' +
-    (pos ? ' · showing ' + pos + ' stats' : '');
+    (pos ? ' · ' + pos + ' stats' : '') +
+    (season !== CURRENT_SEASON ? ' · ' + season + ' stats for ' + CURRENT_SEASON + ' players' : '');
 
   // Generic columns, or the position's badge stats when a position is selected.
   var cols = [
@@ -710,8 +759,19 @@ function loadTeam() {
     });
 }
 
+// Roster is grouped by position and ordered by OUR OWN rating within each
+// group (Colin, Aug 1, 2026: "players need to be sorted by our ratings of them
+// by position"). staff_rating is the coach's manual 0-5 judgement — the thing
+// we actually think of the player — so it leads. Career-DB composite is only a
+// tiebreaker for players we haven't rated yet, and unrated players sort last
+// rather than being treated as zero.
+var teamRoster = [];
+
 function renderTeam(roster) {
-  document.getElementById('teamResultsBar').textContent = roster.length + ' active roster players';
+  teamRoster = roster;
+  var rated = roster.filter(function(r) { return r.staff_rating != null; }).length;
+  document.getElementById('teamResultsBar').textContent =
+    roster.length + ' players · ' + rated + ' with a staff rating · tap for full profile';
 
   var groups = {};
   roster.forEach(function(r) {
@@ -724,66 +784,114 @@ function renderTeam(roster) {
     .concat(Object.keys(groups).filter(function(p) { return POS_ORDER.indexOf(p) < 0; }));
 
   var html = order.map(function(pos) {
-    var players = groups[pos].sort(function(a, b) { return (a.last || '').localeCompare(b.last || ''); });
-    return '<div class="team-group-label">' + pos + '</div>' +
+    var players = groups[pos].sort(function(a, b) {
+      var as = a.staff_rating, bs = b.staff_rating;
+      if (as == null && bs == null) {
+        var ac = bestComposite(a), bc = bestComposite(b);
+        if (ac == null && bc == null) return (a.last || '').localeCompare(b.last || '');
+        if (ac == null) return 1;
+        if (bc == null) return -1;
+        return bc - ac;
+      }
+      if (as == null) return 1;
+      if (bs == null) return -1;
+      return bs - as;
+    });
+    return '<div class="team-group-label">' + pos + ' <span style="font-weight:400">(' + players.length + ')</span></div>' +
       players.map(renderRosterCard).join('');
   }).join('');
 
   document.getElementById('teamList').innerHTML = html || '<div class="loading-note">No active roster players found.</div>';
 }
 
+// Most recent Career-DB composite for a roster player, if she has one.
+function bestComposite(r) {
+  if (!r.unified_id) return null;
+  var rows = allPlayers.filter(function(p) { return p.unified_id === r.unified_id && p.composite != null; })
+                       .sort(function(a, b) { return (b.season || '').localeCompare(a.season || ''); });
+  return rows.length ? rows[0].composite : null;
+}
+
+// Deliberately minimal (Colin, Aug 1, 2026: "The data for them should be in
+// their player badge, not in front facing on this page"). One line per player:
+// jersey, name, class, our rating. Everything else — career history, badge
+// stats, percentiles, radar, recruiting profile — lives behind the tap.
 function renderRosterCard(r) {
   var name = r.first + ' ' + r.last;
-  var classBits = [r.class_year, r.grad_year ? ('grad ' + r.grad_year) : null].filter(Boolean).join(' · ');
-  var career = r.unified_id ? (teamCareerByPlayer[r.unified_id] || []) : [];
-  var profile = r.ecnl_id ? teamRecruitProfile[r.ecnl_id] : null;
+  var classBits = [r.class_year, r.grad_year ? ("'" + String(r.grad_year).slice(-2)) : null]
+                    .filter(Boolean).join(' · ');
+  var comp = bestComposite(r);
 
-  var badge = r.unified_id
-    ? '<span class="rc-badge linked">Career DB linked</span>'
-    : '<span class="rc-badge no-data">No college stats yet</span>';
+  var rating = r.staff_rating != null
+    ? '<div class="rc-rating">' + r.staff_rating.toFixed(1) + '<div class="rc-rating-lbl">staff</div></div>'
+    : (comp != null
+        ? '<div class="rc-rating alt">' + comp.toFixed(0) + '<div class="rc-rating-lbl">stat</div></div>'
+        : '<div class="rc-rating none">—</div>');
 
-  // Career-by-year section — one line per season, which school/club it was
-  // at, so a transfer's full path (and a current player's UNCW history) is
-  // visible at a glance rather than just the latest season's numbers.
-  var careerRows = '';
-  if (career.length) {
-    careerRows = '<div class="rc-career">' +
-      career.map(function(c) {
-        return '<div class="rc-career-row">' +
-          '<span class="rc-career-season">' + (c.season || '—') + '</span>' +
-          '<span class="rc-career-team">' + c.teamName + '</span>' +
-          '<span class="rc-career-line">' + (c.matches_played != null ? c.matches_played : '—') + ' GP · ' +
-          (c.minutes != null ? c.minutes : '—') + ' min' +
-          (c.goals ? ' · ' + c.goals + ' G' : '') + (c.assists ? ' · ' + c.assists + ' A' : '') +
-          '</span></div>';
-      }).join('') +
-      '</div>';
-  } else if (r.unified_id && careerSupa) {
-    careerRows = '<div class="rc-notes">Linked, but no season stats found yet.</div>';
+  return '<div class="roster-card slim" onclick="openRosterDetail(' + r.id + ')">' +
+    '<div class="rc-jersey">' + (r.jersey != null ? r.jersey : '') + '</div>' +
+    '<div class="rc-main">' +
+      '<div class="rc-name">' + name + '</div>' +
+      '<div class="rc-sub">' + (classBits || '—') +
+        (r.scholarship_type ? ' · ' + r.scholarship_type.replace(/_/g, ' ') : '') + '</div>' +
+    '</div>' + rating + '<div class="rc-chev">›</div>' +
+    '</div>';
+}
+
+// Roster player -> the same rich badge the Players tab uses. Falls back to the
+// recruiting profile (club + our scouting stars + notes) for incoming freshmen,
+// who by definition have no college season yet.
+function openRosterDetail(rosterId) {
+  var r = teamRoster.filter(function(x) { return x.id === rosterId; })[0];
+  if (!r) return;
+
+  var rows = r.unified_id
+    ? allPlayers.filter(function(p) { return p.unified_id === r.unified_id; })
+    : [];
+
+  if (rows.length) {
+    var latest = rows.slice().sort(function(a, b) { return (b.season || '').localeCompare(a.season || ''); })[0];
+    openPlayerDetail(r.unified_id, latest.season, latest.team_id, r);
+    return;
   }
 
-  // Recruiting profile section — club + our own scouting rating, for anyone
-  // who doesn't have college stats yet (incoming freshmen/true first-years)
-  // so their card isn't empty. Pulled live from the `ratings` table by
-  // ecnl_id, same data the recruiting app already shows on Player Search.
-  var profileBlock = '';
-  if (!career.length && profile) {
-    profileBlock = '<div class="rc-profile">' +
-      (profile.player_club ? '<div class="rc-profile-club">Club: ' + profile.player_club + '</div>' : '') +
-      '<div class="rc-profile-rating">Recruiting rating: ' + (profile.stars != null ? profile.stars.toFixed(1) + '★' : '—') + '</div>' +
+  // No college data — show what we do know from the recruiting side.
+  showScreen('PlayerDetail');
+  var profile = r.ecnl_id ? teamRecruitProfile[r.ecnl_id] : null;
+  var career  = r.unified_id ? (teamCareerByPlayer[r.unified_id] || []) : [];
+  var html = '<div class="player-header">' +
+    '<div class="player-name"><span class="pos-tag">' + (r.position || '?') + '</span>' + r.first + ' ' + r.last + '</div>' +
+    '<div class="player-sub">' + [r.class_year, r.grad_year ? 'grad ' + r.grad_year : null,
+        r.scholarship_type ? r.scholarship_type.replace(/_/g, ' ') : null].filter(Boolean).join(' · ') + '</div>' +
+    '<div class="overall-score"><div><div class="num">' +
+      (r.staff_rating != null ? r.staff_rating.toFixed(1) : '—') +
+      '</div><div class="lbl">Staff rating</div></div>' +
+      '<div style="flex:1;text-align:right;font-size:11px;opacity:.85">No college season yet</div>' +
+    '</div></div><div class="badges-section">';
+
+  if (profile) {
+    html += '<div class="badge-row">' +
+      (profile.player_club ? '<div class="rc-profile-club">' + profile.player_club + '</div>' : '') +
+      '<div class="rc-profile-rating">Recruiting rating: ' +
+        (profile.stars != null ? profile.stars.toFixed(1) + '★' : '—') + '</div>' +
       (profile.notes ? '<div class="rc-notes">' + profile.notes + '</div>' : '') +
       '</div>';
-  } else if (!career.length && !profile) {
-    profileBlock = '<div class="rc-notes">No club/rating on file yet.</div>';
+  } else {
+    html += '<div class="rc-notes">No club or scouting rating on file yet.</div>';
   }
+  if (r.notes) html += '<div class="rc-notes" style="margin-top:8px">' + r.notes + '</div>';
 
-  return '<div class="roster-card">' +
-    '<div class="rc-top"><div class="rc-name">' + name + badge + '</div>' +
-    '<div class="rc-rating">' + (r.staff_rating != null ? r.staff_rating.toFixed(1) : '—') + '</div></div>' +
-    '<div class="rc-sub">' + classBits + (r.scholarship_type ? ' · ' + r.scholarship_type.replace('_',' ') : '') + '</div>' +
-    (r.notes ? '<div class="rc-notes">' + r.notes + '</div>' : '') +
-    careerRows + profileBlock +
-    '</div>';
+  if (career.length) {
+    html += '<div class="badge-label" style="margin:14px 0 6px">Career</div>' +
+      career.map(function(c) {
+        return '<div class="rc-career-row"><span class="rc-career-season">' + (c.season || '—') + '</span>' +
+          '<span class="rc-career-team">' + c.teamName + '</span>' +
+          '<span class="rc-career-line">' + (c.matches_played != null ? c.matches_played + ' GP · ' : '') +
+          (c.minutes != null ? c.minutes + ' min' : '') + '</span></div>';
+      }).join('');
+  }
+  html += '</div>';
+  document.getElementById('playerDetailBody').innerHTML = html;
 }
 
 // ── Player detail ────────────────────────────────────────────────────────
@@ -794,7 +902,10 @@ function renderRosterCard(r) {
 // beyond finding the UNCW benchmark.
 var UNCW_TEAM_ID = null;
 
-function openPlayerDetail(unifiedId, season, teamId) {
+// `roster` is optional — when the badge is opened from the Team tab it carries
+// our own roster context (class year, scholarship, staff rating, notes) that
+// doesn't exist for opposition players.
+function openPlayerDetail(unifiedId, season, teamId, roster) {
   showScreen('PlayerDetail');
   var body = document.getElementById('playerDetailBody');
   body.innerHTML = '<div class="loading-note">Loading…</div>';
@@ -851,6 +962,21 @@ function openPlayerDetail(unifiedId, season, teamId) {
     '</div>';
 
   html += '<div class="badges-section">';
+
+  // Our own roster context — only present when opened from the Team tab.
+  if (roster) {
+    html += '<div class="badge-row" style="background:#f4f9f9">' +
+      '<div class="badge-top"><div class="badge-label">Staff rating</div>' +
+      '<div class="badge-value">' + (roster.staff_rating != null ? roster.staff_rating.toFixed(1) : '—') + '</div></div>' +
+      '<div class="rc-profile-rating">' + [roster.class_year,
+          roster.grad_year ? 'grad ' + roster.grad_year : null,
+          roster.jersey != null ? '#' + roster.jersey : null,
+          roster.scholarship_type ? roster.scholarship_type.replace(/_/g, ' ') : null,
+          roster.eligibility_remaining != null ? roster.eligibility_remaining + ' yr elig' : null
+        ].filter(Boolean).join(' · ') + '</div>' +
+      (roster.notes ? '<div class="rc-notes">' + roster.notes + '</div>' : '') +
+      '</div>';
+  }
 
   if (p.composite == null) {
     html += '<div class="rc-notes" style="margin-bottom:10px">Not rated — under the ' +

@@ -165,11 +165,16 @@ body {
    should be sortable by clicking on the column." Horizontal scroll because
    this is a phone-width app and a stat table can't fit otherwise. */
 .table-wrap { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
-.ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: auto; }
-.ptable th, .ptable td { padding: 6px 4px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
+.ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: fixed; }
+/* Player column narrowed; the five stat columns are all exactly equal (Colin,
+   Aug 1, 2026). 5 x 14% = 70%, leaving 30% for the player identity. */
+.ptable th.col-name, .ptable td.col-name { width: 30%; }
+.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 14%; }
+.ptable th, .ptable td { padding: 7px 5px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
 .ptable th {
   position: sticky; top: 0; z-index: 3; background: var(--navy); color: #fff;
   font-size: 10px; font-weight: 700; cursor: pointer; user-select: none;
+  white-space: normal; line-height: 1.2;
 }
 .ptable th:hover { background: #004a9e; }
 .ptable th.sorted { background: var(--teal); }
@@ -177,8 +182,7 @@ body {
 /* Name column pinned left so it stays visible while scrolling stats sideways. */
 .ptable th.col-name, .ptable td.col-name {
   position: sticky; left: 0; text-align: left; z-index: 2; background: #fff;
-  border-right: 1px solid var(--border); width: 100%; max-width: 0;
-  overflow: hidden; text-overflow: ellipsis; padding-left: 8px;
+  border-right: 1px solid var(--border); padding-left: 8px; vertical-align: middle;
 }
 .ptable th.col-name { z-index: 4; background: var(--navy); }
 .ptable tbody tr:nth-child(even) td { background: #fafbfc; }
@@ -186,14 +190,22 @@ body {
 .ptable tbody tr:hover td { background: #e6f7f7; cursor: pointer; }
 .ptable tbody tr:hover td.col-name { background: #e6f7f7; }
 .ptable td.col-name b { color: var(--navy); font-size: 12px; }
-.ptable td.col-name .sub { font-size: 9px; margin-top: 1px; }
+.ptable td.col-name .sub { font-size: 9px; margin-top: 1px; white-space: normal;
+  line-height: 1.25; color: var(--muted); }
+.ptable td.col-name b { white-space: normal; line-height: 1.2; }
 .ptable td.col-name .pos-tag { font-size: 8px; padding: 1px 4px; margin-right: 4px; }
 .clear-btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 700;
   border: 1px solid var(--border); border-radius: 8px; background: #fff;
   color: var(--muted); cursor: pointer; }
 .clear-btn:hover { border-color: var(--teal); color: var(--teal); }
 .ptable td .sub { color: var(--muted); font-size: 10px; }
-.ptable td.rating { font-weight: 800; color: var(--navy); font-size: 12px; }
+.ptable th.col-rating { background: var(--teal); }
+.ptable th.col-rating.sorted { background: #008b86; }
+.ptable td.col-rating { background: rgba(0,166,160,.10); border-left: 1px solid rgba(0,166,160,.35);
+  border-right: 1px solid rgba(0,166,160,.35); }
+.ptable tbody tr:nth-child(even) td.col-rating { background: rgba(0,166,160,.16); }
+.ptable tbody tr:hover td.col-rating { background: rgba(0,166,160,.24); }
+.ptable td.rating { font-weight: 800; color: var(--navy); font-size: 15px; }
 .ptable td.rank { color: var(--muted); }
 .pos-tag { display: inline-block; background: var(--navy); color: #fff; font-size: 9px;
   font-weight: 700; padding: 1px 5px; border-radius: 20px; margin-right: 4px; }
@@ -257,7 +269,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.1 · honours + roster positions</div>
+        <div class="sub">Women's Soccer · v1.2 · wider stat columns</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -695,12 +707,12 @@ function renderPlayers() {
   // widest and least interesting, the raw rating isn't needed on the list, and
   // everything must fit a phone without sideways scrolling.
   var cols = [
-    { k: 'name',            t: 'Player', cls: 'col-name' },
-    { k: 'composite_adj',   t: 'Rtg'   },
-    { k: 'matches_played',  t: 'GP'    },
-    { k: 'minutes',         t: 'Min'   },
-    { k: 'goals',           t: 'G'     },
-    { k: 'assists',         t: 'A'     }
+    { k: 'name',            t: 'Player',  cls: 'col-name' },
+    { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
+    { k: 'matches_played',  t: 'GP'     },
+    { k: 'minutes',         t: 'Min'    },
+    { k: 'goals',           t: 'Goals'  },
+    { k: 'assists',         t: 'Assists' }
   ];
   if (pos && BADGE_COLS[pos]) {
     BADGE_COLS[pos].forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
@@ -720,7 +732,9 @@ function renderPlayers() {
       if (c.k === 'name') {
         // teams.abbreviation / conference_short are already in the DB — use them
         // rather than full names, which is what forced horizontal scrolling.
-        var sch = t.abbreviation || (t.name ? t.name.slice(0, 12) : '—');
+        // Full school name, wrapped — Colin, Aug 1, 2026: abbreviations aren't
+        // needed once the column is sized properly, and the full name reads better.
+        var sch = t.name || '—';
         var cf  = t.conference_short || '';
         return '<td class="col-name">' +
           '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
@@ -728,8 +742,8 @@ function renderPlayers() {
       }
       if (c.k === 'composite_adj') {
         return p.composite_adj == null
-          ? '<td class="unrated">n/a</td>'
-          : '<td class="rating">' + p.composite_adj.toFixed(1) + '</td>';
+          ? '<td class="col-rating unrated">n/a</td>'
+          : '<td class="col-rating rating">' + p.composite_adj.toFixed(1) + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);

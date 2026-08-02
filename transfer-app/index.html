@@ -216,7 +216,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v0.7 · team badges + dupe-season fix</div>
+        <div class="sub">Women's Soccer · v0.8 · leaner players list</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -630,13 +630,13 @@ function renderPlayers() {
     (season !== CURRENT_SEASON ? ' · ' + season + ' stats for ' + CURRENT_SEASON + ' players' : '');
 
   // Generic columns, or the position's badge stats when a position is selected.
+  // Ranks (national/conference/team) are deliberately NOT columns here — Colin,
+  // Aug 1, 2026: too much clutter on the list. They live on the player badge,
+  // where there's room to label them properly.
   var cols = [
     { k: 'name',            t: 'Player',  cls: 'col-name' },
     { k: 'school',          t: 'School'  },
     { k: 'composite',       t: 'Rating'  },
-    { k: 'rank_nat',        t: 'Nat'     },
-    { k: 'rank_conf',       t: 'Conf'    },
-    { k: 'rank_team',       t: 'Team'    },
     { k: 'matches_played',  t: 'GP'      },
     { k: 'matches_started', t: 'GS'      },
     { k: 'minutes',         t: 'Min'     },

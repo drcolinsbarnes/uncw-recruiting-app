@@ -225,6 +225,18 @@ body {
 .hist td.school { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 .hist tr.cur td { background: #e6f7f7; font-weight: 700; }
 .hist-note { font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+/* Honours */
+.award-row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid var(--border); }
+.aw-season { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.aw-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 8px;
+  border-radius: 20px; line-height: 1.3; }
+.aw-badge.mini { font-size: 8px; padding: 1px 5px; margin-left: 5px; vertical-align: middle; }
+.aw-poy    { background: var(--gold);  color: var(--navy); }
+.aw-first  { background: #dcfce7; color: #15803d; }
+.aw-second { background: #e0f2fe; color: #0369a1; }
+.aw-other  { background: var(--border); color: var(--muted); }
 </style>
 </head>
 <body>
@@ -245,7 +257,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.0 · mobile-fit list</div>
+        <div class="sub">Women's Soccer · v1.1 · honours + roster positions</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -752,6 +764,7 @@ function rankCell(rank, n) {
 // ── Team tab — UNCW's own active roster ─────────────────────────────────
 var POS_ORDER = ['GK','CB','OB','DM','CM','AM','WF','CF'];
 var teamCareerByPlayer = {};  // unified_id -> array of {season, team_id, teamName, minutes, matches_played, goals, assists, shots}, sorted oldest->newest
+var teamAwards = {};          // roster_player_id -> [{season, award_name, award_value}]
 var teamRecruitProfile = {};  // ecnl_id -> {club, stars, notes} — pulled from the `ratings` table live, no schema change needed
 
 function loadTeam() {
@@ -782,8 +795,15 @@ function loadTeam() {
         ? recruitSupa.from('ratings').select('player_id,player_club,stars,notes,match_date').in('player_id', ecnlIds)
         : Promise.resolve({ data: [] });
 
-      Promise.all([careerP, teamsP, ratingsP]).then(function(results) {
-        var statsRes = results[0], teamsRes = results[1], ratingsRes = results[2];
+      // Honours (All-Conference, POY, All-Region, All-Rookie, All-Tournament).
+      // Colin, Aug 1, 2026 — these belong on the badge; a first-team
+      // All-Conference selection is context the stat line alone doesn't carry.
+      var awardsP = recruitSupa.from('roster_awards')
+        .select('roster_player_id,season,award_name,award_value')
+        .eq('school_id', UNCW_SCHOOL_ID);
+
+      Promise.all([careerP, teamsP, ratingsP, awardsP]).then(function(results) {
+        var statsRes = results[0], teamsRes = results[1], ratingsRes = results[2], awardsRes = results[3];
         var teamNames = {};
         (teamsRes.data || []).forEach(function(t) { teamNames[t.id] = t.name; });
 
@@ -820,6 +840,18 @@ function loadTeam() {
           }
         });
 
+        var aw = {};
+        (awardsRes.data || []).forEach(function(a) {
+          if (!aw[a.roster_player_id]) aw[a.roster_player_id] = [];
+          aw[a.roster_player_id].push(a);
+        });
+        Object.keys(aw).forEach(function(k) {
+          aw[k].sort(function(x, y) {
+            return (y.season || '').localeCompare(x.season || '') ||
+                   (y.award_value || 0) - (x.award_value || 0);
+          });
+        });
+        teamAwards = aw;
         teamCareerByPlayer = career;
         teamRecruitProfile = profiles;
         renderTeam(roster);
@@ -899,7 +931,7 @@ function renderRosterCard(r) {
   return '<div class="roster-card slim" onclick="openRosterDetail(' + r.id + ')">' +
     '<div class="rc-jersey">' + (r.jersey != null ? r.jersey : '') + '</div>' +
     '<div class="rc-main">' +
-      '<div class="rc-name">' + name + '</div>' +
+      '<div class="rc-name">' + name + topAwardChip(r) + '</div>' +
       '<div class="rc-sub">' + (classBits || '—') +
         (r.scholarship_type ? ' · ' + r.scholarship_type.replace(/_/g, ' ') : '') + '</div>' +
     '</div>' + rating + '<div class="rc-chev">›</div>' +
@@ -1047,6 +1079,8 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
 
   html += '<div class="badges-section">';
 
+  if (roster) html += awardsBlock(roster);
+
   // Our own roster context — only present when opened from the Team tab.
   if (roster) {
     html += '<div class="badge-row" style="background:#f4f9f9">' +
@@ -1151,6 +1185,36 @@ function overallExplainer(p, pos, t) {
     Object.keys(b).length + ' ' + (pos || '') + ' stats' +
     (top.length ? ', weighted toward ' + top.join(' and ') : '') + '. ' +
     band + ' ' + posWord(pos) + ' nationally at her position.' + adjNote + '</div>';
+}
+
+// Honours list. Highest-value award first within each season; the value scale
+// is the 0-2 one roster_awards already uses for the performance rating
+// (POY 2.0, first team 1.5, second team 1.0, all-rookie/tournament 0.75).
+function awardsBlock(roster) {
+  var list = teamAwards[roster.id] || [];
+  if (!list.length) return '';
+  return '<div class="section-title">Honours</div>' +
+    list.map(function(a) {
+      var cls = a.award_value >= 2 ? 'aw-poy' : a.award_value >= 1.5 ? 'aw-first'
+              : a.award_value >= 1 ? 'aw-second' : 'aw-other';
+      return '<div class="award-row"><span class="aw-badge ' + cls + '">' +
+        a.award_name + '</span><span class="aw-season">' + a.season + '</span></div>';
+    }).join('');
+}
+
+// Compact honour chip for the roster list — highest award only.
+function topAwardChip(roster) {
+  var list = teamAwards[roster.id] || [];
+  if (!list.length) return '';
+  var best = list.slice().sort(function(a, b) { return (b.award_value || 0) - (a.award_value || 0); })[0];
+  var short = best.award_name
+    .replace('All-Conference First Team', '1st Team').replace('All-Conference Second Team', '2nd Team')
+    .replace('CAA Attacking Player of the Year', 'Attacking POY')
+    .replace('United Soccer Coaches All-Region', 'All-Region')
+    .replace(/CAA |Atlantic 10 /, '').replace(' Team', '');
+  var cls = best.award_value >= 2 ? 'aw-poy' : best.award_value >= 1.5 ? 'aw-first'
+          : best.award_value >= 1 ? 'aw-second' : 'aw-other';
+  return '<span class="aw-badge ' + cls + ' mini">' + short + '</span>';
 }
 
 function posWord(pos) {

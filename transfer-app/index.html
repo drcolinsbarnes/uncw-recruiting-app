@@ -215,6 +215,14 @@ body {
 .tier-Mid { background: #e0f2fe; color: #0369a1; }
 .tier-Low { background: var(--border); color: var(--muted); }
 .unrated { color: var(--muted); font-style: italic; }
+/* A floor-only rating is a PRIOR, not a measurement — she has 90-449 minutes,
+   too few for her rate stats to mean anything, so the number is derived from her
+   programme and how much her coach plays her. It must never look identical to a
+   rating earned over a full season. Muted, italic, and marked with a degree sign. */
+.est { opacity: .62; font-style: italic; }
+.est-mark { font-size: 9px; vertical-align: super; letter-spacing: .3px; }
+.basis-note { background: #fff6e5; border-left: 3px solid #e0a020; color: #6b4d05;
+  font-size: 11.5px; line-height: 1.55; padding: 8px 10px; margin: 8px 0 0; }
 .ptable td.raw-rating { color: var(--muted); font-size: 11px; }
 
 /* ── Player badge — matches the v0.1 preview layout Colin approved ──────── */
@@ -269,7 +277,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.2 · wider stat columns</div>
+        <div class="sub">Women's Soccer · v1.3 · bench players rated</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -540,7 +548,7 @@ function fetchRatingsPage(offset, acc) {
   document.getElementById('playersResultsBar').textContent =
     'Loading players… ' + acc.length;
   careerSupa.from('player_transfer_ratings')
-    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
+    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
     .range(offset, offset + PAGE - 1)
     .then(function(res) {
       if (res.error) {
@@ -691,10 +699,12 @@ function renderPlayers() {
     return (x - y) * sortDir;
   });
 
-  var rated  = rows.filter(function(r) { return r.composite_adj != null; }).length;
+  var rated  = rows.filter(function(r) { return r.rating_basis === 'stats'; }).length;
+  var est    = rows.filter(function(r) { return r.rating_basis === 'bench (floor only)'; }).length;
   var season = document.getElementById('fSeason').value;
   document.getElementById('playersResultsBar').textContent =
     rows.length + ' players · ' + rated + ' rated' +
+    (est ? ' · ' + est + ' est (bench)' : '') +
     (pos ? ' · ' + pos + ' stats' : '') +
     (season !== CURRENT_SEASON ? ' · ' + season + ' stats for ' + CURRENT_SEASON + ' players' : '');
 
@@ -741,9 +751,11 @@ function renderPlayers() {
           '<div class="sub">' + sch + (cf ? ' · ' + cf : '') + '</div></td>';
       }
       if (c.k === 'composite_adj') {
-        return p.composite_adj == null
-          ? '<td class="col-rating unrated">n/a</td>'
-          : '<td class="col-rating rating">' + p.composite_adj.toFixed(1) + '</td>';
+        if (p.composite_adj == null) return '<td class="col-rating unrated">n/a</td>';
+        var est = p.rating_basis === 'bench (floor only)';
+        return '<td class="col-rating rating' + (est ? ' est' : '') + '"' +
+          (est ? ' title="Floor only — under 450 minutes. Based on her programme and how much she plays, not her stats."' : '') +
+          '>' + p.composite_adj.toFixed(1) + (est ? '<span class="est-mark">est</span>' : '') + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
@@ -1068,9 +1080,10 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
     '</div>' +
     profileFlag(p, roster) +
     '<div class="overall-score">' +
-      '<div><div class="num">' + (p.composite_adj != null ? p.composite_adj.toFixed(0)
-                                   : (p.composite != null ? p.composite.toFixed(0) : 'n/a')) + '</div>' +
-      '<div class="lbl">Overall</div></div>' +
+      '<div><div class="num' + (p.rating_basis === 'bench (floor only)' ? ' est' : '') + '">' +
+        (p.composite_adj != null ? p.composite_adj.toFixed(0)
+          : (p.composite != null ? p.composite.toFixed(0) : 'n/a')) + '</div>' +
+      '<div class="lbl">' + (p.rating_basis === 'bench (floor only)' ? 'Estimate' : 'Overall') + '</div></div>' +
       '<div style="flex:1;text-align:right;font-size:11px;line-height:1.5">' +
         rankLine('National', p.rank_nat_adj != null ? p.rank_nat_adj : p.rank_nat, p.n_nat) +
         rankLine('Conference', p.rank_conf, p.n_conf) +
@@ -1181,6 +1194,20 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
 // Plain-English explanation of what the Overall number is, built from the
 // position's actual top-weighted stats rather than a canned sentence.
 function overallExplainer(p, pos, t) {
+  // A bench player gets a completely different explanation, because a completely
+  // different thing produced her number. Saying "national composite across her
+  // stats" would be a lie — she has no usable stats, which is the whole reason
+  // she has a floor instead. This is the population Colin actually signs from
+  // (Leonard 227 min, Thomas 195, Lutz 336, White 495, Longwell 584), so the
+  // number has to be shown AND honestly caveated, not hidden.
+  if (p.rating_basis === 'bench (floor only)') {
+    var tn = t && t.tier ? t.tier : 'her level';
+    return '<div class="basis-note"><b>Estimate — not earned from stats.</b> ' +
+      'She played ' + (p.minutes != null ? p.minutes : '?') + ' minutes, below the 450 needed for her ' +
+      'per-90 rates to mean anything. This number is a floor set by her programme (' + tn + ') and ' +
+      'the share of minutes her coach gives her — a read on the staff\'s judgement, not hers. ' +
+      'She is deliberately left out of the national rankings. Treat it as a lead to watch on film.</div>';
+  }
   if (p.composite_adj == null && p.composite == null) return '';
   var b = p.badge_stats || {};
   var top = Object.keys(b).sort(function(x, y) { return (b[y].w || 0) - (b[x].w || 0); })

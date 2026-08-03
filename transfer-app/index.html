@@ -168,8 +168,8 @@ body {
 .ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: fixed; }
 /* Player column narrowed; the five stat columns are all exactly equal (Colin,
    Aug 1, 2026). 5 x 14% = 70%, leaving 30% for the player identity. */
-.ptable th.col-name, .ptable td.col-name { width: 30%; }
-.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 14%; }
+.ptable th.col-name, .ptable td.col-name { width: 40%; }
+.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 12%; }
 .ptable th, .ptable td { padding: 7px 5px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
 .ptable th {
   position: sticky; top: 0; z-index: 3; background: var(--navy); color: #fff;
@@ -189,11 +189,11 @@ body {
 .ptable tbody tr:nth-child(even) td.col-name { background: #fafbfc; }
 .ptable tbody tr:hover td { background: #e6f7f7; cursor: pointer; }
 .ptable tbody tr:hover td.col-name { background: #e6f7f7; }
-.ptable td.col-name b { color: var(--navy); font-size: 12px; }
-.ptable td.col-name .sub { font-size: 9px; margin-top: 1px; white-space: normal;
-  line-height: 1.25; color: var(--muted); }
+.ptable td.col-name b { color: var(--navy); font-size: 14px; font-weight: 800; letter-spacing: -.1px; }
+.ptable td.col-name .sub { font-size: 11px; margin-top: 2px; white-space: normal;
+  line-height: 1.3; color: var(--muted); }
 .ptable td.col-name b { white-space: normal; line-height: 1.2; }
-.ptable td.col-name .pos-tag { font-size: 8px; padding: 1px 4px; margin-right: 4px; }
+.ptable td.col-name .pos-tag { font-size: 10px; padding: 2px 6px; margin-right: 5px; }
 .clear-btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 700;
   border: 1px solid var(--border); border-radius: 8px; background: #fff;
   color: var(--muted); cursor: pointer; }
@@ -207,6 +207,7 @@ body {
 .ptable tbody tr:hover td.col-rating { background: rgba(0,166,160,.24); }
 .ptable td.rating { font-weight: 800; color: var(--navy); font-size: 15px; }
 .ptable td.rank { color: var(--muted); }
+.ptable td.mins { font-variant-numeric: tabular-nums; }
 .pos-tag { display: inline-block; background: var(--navy); color: #fff; font-size: 9px;
   font-weight: 700; padding: 1px 5px; border-radius: 20px; margin-right: 4px; }
 .tier-tag { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 20px; }
@@ -277,7 +278,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.3 · bench players rated</div>
+        <div class="sub">Women's Soccer · v1.4 · wider player column, full minutes</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -520,9 +521,9 @@ var PAGE = 1000;           // PostgREST hard-caps every request at 1000 rows
 // When a position filter is active these columns replace the generic ones.
 var BADGE_COLS = {
   GK: [['save_rate_pct','Sv%'],['prevented_goals_per90','GPrev'],['exits_per90','Exit'],['gk_aerial_duels_per90','Aer'],['accurate_long_passes_pct','LP%']],
-  CB: [['successful_defensive_per90','SDA'],['aerial_duels_won_per90','AerW'],['shots_blocked_per90','Blk'],['accurate_passes_pct','Pass%']],
-  OB: [['successful_defensive_per90','SDA'],['successful_crosses_per90','SCrs'],['shots_blocked_per90','Blk'],['accurate_passes_pct','Pass%']],
-  DM: [['successful_defensive_per90','SDA'],['aerial_duels_won_per90','AerW'],['shots_blocked_per90','Blk'],['progressive_passes_per90','ProgP']],
+  CB: [['aerial_duels_won_per90','AerW'],['duels_won_pct','Duel%'],['defensive_duels_won_pct','DefD%'],['long_passes_per90','LngP']],
+  OB: [['defensive_duels_won_pct','DefD%'],['accurate_long_passes_pct','LngP%'],['successful_crosses_per90','SCrs'],['goal_contributions_per90','G+A']],
+  DM: [['progressive_passes_per90','ProgP'],['shots_per90','Sh'],['goal_contributions_per90','G+A'],['forward_passes_per90','FwdP']],
   CM: [['progressive_passes_per90','ProgP'],['key_passes_per90','KeyP'],['accurate_passes_pct','Pass%'],['defensive_duels_won_pct','DDW%'],['passes_per90','Pass']],
   AM: [['successful_attacking_per90','SAA'],['successful_defensive_per90','SDA'],['xg_plus_xa_per90','xG+xA'],['key_passes_per90','KeyP']],
   WF: [['successful_attacking_per90','SAA'],['xg_plus_xa_per90','xG+xA'],['smart_passes_per90','Smart'],['accelerations_per90','Acc'],['successful_defensive_per90','SDA']],
@@ -766,8 +767,8 @@ function renderPlayers() {
         return '<td>' + b.v.toFixed(2) + (b.nat != null ? '<div class="sub">' + Math.round(b.nat) + 'th</div>' : '') + '</td>';
       }
       var v = p[c.k];
-      if (c.k === 'minutes' && v != null && v >= 1000) {
-        return '<td>' + (v / 1000).toFixed(1) + 'k</td>';
+      if (c.k === 'minutes') {
+        return '<td class="mins">' + (v == null ? '—' : Math.round(v)) + '</td>';
       }
       return '<td>' + (v == null ? '—' : v) + '</td>';
     }).join('');

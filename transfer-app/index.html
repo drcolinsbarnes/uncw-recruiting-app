@@ -208,6 +208,10 @@ body {
 .ptable td.rating { font-weight: 800; color: var(--navy); font-size: 15px; }
 .ptable td.rank { color: var(--muted); }
 .ptable td.mins { font-variant-numeric: tabular-nums; }
+.xfer-tag { font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 20px;
+  margin-left: 5px; letter-spacing: .3px; vertical-align: 1px; }
+.xfer-active { background: #d1fae5; color: #065f46; }
+.xfer-prev { background: #ede9fe; color: #5b21b6; }
 .pos-tag { display: inline-block; background: var(--navy); color: #fff; font-size: 9px;
   font-weight: 700; padding: 1px 5px; border-radius: 20px; margin-right: 4px; }
 .tier-tag { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 20px; }
@@ -278,7 +282,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.4 · wider player column, full minutes</div>
+        <div class="sub">Women's Soccer · v1.5 · transfer history filter</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -317,6 +321,12 @@ body {
             <option value="450" selected>450+ min (rated)</option>
             <option value="900">900+ min</option>
             <option value="1200">1200+ min</option>
+          </select>
+          <select id="fXfer" onchange="renderPlayers()">
+            <option value="">Any transfer history</option>
+            <option value="active">In the portal now</option>
+            <option value="transferred">Has transferred before</option>
+            <option value="never">Never transferred</option>
           </select>
           <select id="fRpi" onchange="renderPlayers()">
             <option value="">Any team RPI</option>
@@ -549,7 +559,7 @@ function fetchRatingsPage(offset, acc) {
   document.getElementById('playersResultsBar').textContent =
     'Loading players… ' + acc.length;
   careerSupa.from('player_transfer_ratings')
-    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
+    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,transfer_history,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
     .range(offset, offset + PAGE - 1)
     .then(function(res) {
       if (res.error) {
@@ -635,6 +645,7 @@ function clearFilters() {
   document.getElementById('fTier').value   = '';
   document.getElementById('fMin').value    = '450';
   document.getElementById('fRpi').value    = '';
+  document.getElementById('fXfer').value   = '';
   document.getElementById('fSearch').value = '';
   sortKey = 'composite_adj'; sortDir = -1;
   renderPlayers();
@@ -647,6 +658,7 @@ function filteredPlayers() {
   var tier   = document.getElementById('fTier').value;
   var minMin = parseInt(document.getElementById('fMin').value, 10) || 0;
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
+  var xfer   = document.getElementById('fXfer').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
   return allPlayers.filter(function(p) {
@@ -662,6 +674,7 @@ function filteredPlayers() {
     if (tier && (!t || t.tier !== tier)) return false;
     if (minMin && (p.minutes || 0) < minMin) return false;
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
+    if (xfer && p.transfer_history !== xfer) return false;
     if (q) {
       var hay = (p._name + ' ' + ((t && t.name) || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -749,6 +762,10 @@ function renderPlayers() {
         var cf  = t.conference_short || '';
         return '<td class="col-name">' +
           '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
+          (p.transfer_history === 'active'
+             ? '<span class="xfer-tag xfer-active" title="In the transfer portal now">PORTAL</span>' : '') +
+          (p.transfer_history === 'transferred'
+             ? '<span class="xfer-tag xfer-prev" title="Has transferred at least once before">XFER</span>' : '') +
           '<div class="sub">' + sch + (cf ? ' · ' + cf : '') + '</div></td>';
       }
       if (c.k === 'composite_adj') {

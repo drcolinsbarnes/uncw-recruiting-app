@@ -168,8 +168,8 @@ body {
 .ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: fixed; }
 /* Player column narrowed; the five stat columns are all exactly equal (Colin,
    Aug 1, 2026). 5 x 14% = 70%, leaving 30% for the player identity. */
-.ptable th.col-name, .ptable td.col-name { width: 40%; }
-.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 12%; }
+.ptable th.col-name, .ptable td.col-name { width: 34%; }
+.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 11%; }
 .ptable th, .ptable td { padding: 7px 5px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
 .ptable th {
   position: sticky; top: 0; z-index: 3; background: var(--navy); color: #fff;
@@ -190,8 +190,8 @@ body {
 .ptable tbody tr:hover td { background: #e6f7f7; cursor: pointer; }
 .ptable tbody tr:hover td.col-name { background: #e6f7f7; }
 .ptable td.col-name b { color: var(--navy); font-size: 14px; font-weight: 800; letter-spacing: -.1px; }
-.ptable td.col-name .sub { font-size: 11px; margin-top: 2px; white-space: normal;
-  line-height: 1.3; color: var(--muted); }
+.ptable td.col-name .sub { font-size: 11px; margin-top: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.3; color: var(--muted); }
 .ptable td.col-name b { white-space: normal; line-height: 1.2; }
 .ptable td.col-name .pos-tag { font-size: 10px; padding: 2px 6px; margin-right: 5px; }
 .clear-btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; font-weight: 700;
@@ -225,6 +225,25 @@ body {
    programme and how much her coach plays her. It must never look identical to a
    rating earned over a full season. Muted, italic, and marked with a degree sign. */
 .est { opacity: .62; font-style: italic; }
+.pt-block { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
+  margin-top: 8px; background: #fff; }
+.pt-head { font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--muted); display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.pt-tag { font-size: 11px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  color: var(--navy); background: #eef2f7; padding: 2px 7px; border-radius: 20px; }
+.pt-role { font-size: 11px; font-weight: 800; letter-spacing: .2px; text-transform: capitalize;
+  padding: 2px 8px; border-radius: 20px; }
+.pt-conf { font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 20px; }
+.pt-body { font-size: 12.5px; line-height: 1.5; color: var(--navy); }
+.aw-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
+  padding: 5px 0; border-bottom: 1px solid var(--border); }
+.aw-row:last-child { border-bottom: 0; }
+.aw-yr { font-weight: 700; color: var(--muted); font-size: 11px; min-width: 30px; }
+.aw-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 20px;
+  background: #fef3c7; color: #92400e; letter-spacing: .2px; }
+.aw-aa { background: #ede9fe; color: #5b21b6; }
+.hist tr.tot td { font-weight: 800; border-top: 2px solid var(--navy); background: #f8fafc; }
 .est-mark { font-size: 9px; vertical-align: super; letter-spacing: .3px; }
 .basis-note { background: #fff6e5; border-left: 3px solid #e0a020; color: #6b4d05;
   font-size: 11.5px; line-height: 1.55; padding: 8px 10px; margin: 8px 0 0; }
@@ -282,7 +301,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.5 · transfer history filter</div>
+        <div class="sub">Women's Soccer · v1.6 · player type, UNCW ready, honours</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -523,28 +542,59 @@ function boot() {
 // columns that have never existed — which is why the position filter returned
 // 0 players and no ratings ever rendered.
 var teamsById = {};
+// unified_id -> [award rows]. Same independent ground truth the defensive
+// profiles were validated against; on the card it is simply the honours list.
+var awardsByPlayer = {};
+
 var sortKey = 'composite_adj';
 var sortDir = -1;          // -1 = descending; rating high-to-low is the default
 var PAGE = 1000;           // PostgREST hard-caps every request at 1000 rows
 
 // Position badge stats, mirroring BADGE_STAT_PROFILES in transfer_stat_profiles.py.
 // When a position filter is active these columns replace the generic ones.
-var BADGE_COLS = {
-  GK: [['save_rate_pct','Sv%'],['prevented_goals_per90','GPrev'],['exits_per90','Exit'],['gk_aerial_duels_per90','Aer'],['accurate_long_passes_pct','LP%']],
-  CB: [['aerial_duels_won_per90','AerW'],['duels_won_pct','Duel%'],['defensive_duels_won_pct','DefD%'],['long_passes_per90','LngP']],
-  OB: [['defensive_duels_won_pct','DefD%'],['accurate_long_passes_pct','LngP%'],['successful_crosses_per90','SCrs'],['goal_contributions_per90','G+A']],
-  DM: [['progressive_passes_per90','ProgP'],['shots_per90','Sh'],['goal_contributions_per90','G+A'],['forward_passes_per90','FwdP']],
-  CM: [['progressive_passes_per90','ProgP'],['key_passes_per90','KeyP'],['accurate_passes_pct','Pass%'],['defensive_duels_won_pct','DDW%'],['passes_per90','Pass']],
-  AM: [['successful_attacking_per90','SAA'],['successful_defensive_per90','SDA'],['xg_plus_xa_per90','xG+xA'],['key_passes_per90','KeyP']],
-  WF: [['successful_attacking_per90','SAA'],['xg_plus_xa_per90','xG+xA'],['smart_passes_per90','Smart'],['accelerations_per90','Acc'],['successful_defensive_per90','SDA']],
-  CF: [['xg_plus_xa_per90','xG+xA'],['successful_attacking_per90','SAA'],['accelerations_per90','Acc'],['head_goals_per90','HdG'],['successful_defensive_per90','SDA']]
+// Short header labels. Anything not listed falls back to a generated
+// abbreviation, so a new stat never renders as a blank column.
+var STAT_ABBR = {
+  save_rate_pct:'Sv%', prevented_goals_per90:'GPrev', exits_per90:'Exit',
+  gk_aerial_duels_per90:'Aer', accurate_long_passes_pct:'LP%',
+  aerial_duels_won_per90:'AerW', aerial_duels_won_pct:'Aer%', duels_won_pct:'Duel%',
+  defensive_duels_won_pct:'DDW%', long_passes_per90:'LngP', shots_per90:'Sh',
+  goal_contributions_per90:'G+A', goals_per90:'G/90', xg_plus_xa_per90:'xG+xA',
+  progressive_passes_per90:'ProgP', forward_passes_per90:'FwdP',
+  successful_crosses_per90:'SCrs', successful_attacking_per90:'SAA',
+  successful_defensive_per90:'SDA', key_passes_per90:'KeyP',
+  smart_passes_per90:'Smart', accelerations_per90:'Acc',
+  touches_in_box_per90:'Box', accurate_passes_pct:'Pass%', passes_per90:'Pass'
 };
+function abbr(k, label) {
+  if (STAT_ABBR[k]) return STAT_ABBR[k];
+  return (label || k).replace(/\/90$/, '').split(/[\s_]+/)
+    .map(function(w) { return w.charAt(0).toUpperCase(); }).join('').slice(0, 5);
+}
+
+// The stat columns for a position, read from whichever stats the scoring
+// profile actually produced, ordered by weight. Derived at render time from the
+// loaded rows, so it tracks any profile change automatically.
+function badgeColsFor(pos) {
+  var w = {}, lbl = {};
+  for (var i = 0; i < allPlayers.length; i++) {
+    var r = allPlayers[i];
+    if (r.primary_pos !== pos || !r.badge_stats) continue;
+    for (var k in r.badge_stats) {
+      var b = r.badge_stats[k];
+      if (b && b.v != null) { w[k] = Math.max(w[k] || 0, b.w || 0); lbl[k] = b.label; }
+    }
+    if (Object.keys(w).length >= 8) break;
+  }
+  return Object.keys(w).sort(function(a, b) { return w[b] - w[a]; })
+           .slice(0, 4).map(function(k) { return [k, abbr(k, lbl[k])]; });
+}
 
 function loadPlayers() {
   var bar = document.getElementById('playersResultsBar');
   bar.textContent = 'Loading players…';
 
-  careerSupa.from('teams').select('id,name,conference,rpi_rank,conference_rpi,tier')
+  careerSupa.from('teams').select('id,name,short_name,conference,conference_short,rpi_rank,conference_rpi,tier')
     .then(function(tres) {
       (tres.data || []).forEach(function(t) { teamsById[t.id] = t; });
       populateConferenceFilter();
@@ -559,7 +609,7 @@ function fetchRatingsPage(offset, acc) {
   document.getElementById('playersResultsBar').textContent =
     'Loading players… ' + acc.length;
   careerSupa.from('player_transfer_ratings')
-    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,transfer_history,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
+    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,transfer_history,player_type,player_type_tag,player_type_conf,uncw_role,uncw_note,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
     .range(offset, offset + PAGE - 1)
     .then(function(res) {
       if (res.error) {
@@ -587,6 +637,14 @@ function attachNames() {
       renderPlayers();
       return;
     }
+    careerSupa.from('college_awards')
+      .select('unified_id,season,award_type,award_level,region,award_body')
+      .then(function(r) {
+        (r.data || []).forEach(function(a) {
+          (awardsByPlayer[a.unified_id] = awardsByPlayer[a.unified_id] || []).push(a);
+        });
+      });
+
     careerSupa.from('unified_players').select('unified_id,first,last')
       .in('unified_id', ids.slice(i, i + step))
       .then(function(r) {
@@ -735,11 +793,11 @@ function renderPlayers() {
     { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
     { k: 'matches_played',  t: 'GP'     },
     { k: 'minutes',         t: 'Min'    },
-    { k: 'goals',           t: 'Goals'  },
-    { k: 'assists',         t: 'Assists' }
+    { k: 'goals',           t: 'G'      },
+    { k: 'assists',         t: 'A'       }
   ];
-  if (pos && BADGE_COLS[pos]) {
-    BADGE_COLS[pos].forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
+  if (pos) {
+    badgeColsFor(pos).forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
   }
 
   document.getElementById('playersHead').innerHTML = '<tr>' + cols.map(function(c) {
@@ -758,7 +816,10 @@ function renderPlayers() {
         // rather than full names, which is what forced horizontal scrolling.
         // Full school name, wrapped — Colin, Aug 1, 2026: abbreviations aren't
         // needed once the column is sized properly, and the full name reads better.
-        var sch = t.name || '—';
+        // short_name + conference_short, both from the DB. The full legal name
+        // ("University of North Carolina, Chapel Hill") is what forced this onto
+        // two lines; "North Carolina · ACC" fits one.
+        var sch = t.short_name || t.name || '—';
         var cf  = t.conference_short || '';
         return '<td class="col-name">' +
           '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
@@ -773,7 +834,7 @@ function renderPlayers() {
         var est = p.rating_basis === 'bench (floor only)';
         return '<td class="col-rating rating' + (est ? ' est' : '') + '"' +
           (est ? ' title="Floor only — under 450 minutes. Based on her programme and how much she plays, not her stats."' : '') +
-          '>' + p.composite_adj.toFixed(1) + (est ? '<span class="est-mark">est</span>' : '') + '</td>';
+          '>' + Math.round(p.composite_adj) + (est ? '<span class="est-mark">est</span>' : '') + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
@@ -1077,14 +1138,18 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   }
 
   var badges = p.badge_stats || {};
-  var order = (BADGE_COLS[pos] || []).map(function(c) { return c[0]; });
+  var order = Object.keys(badges)
+    .filter(function(k) { return badges[k] && badges[k].v != null; })
+    .sort(function(a, b) { return (badges[b].w || 0) - (badges[a].w || 0); });
+  var missing = Object.keys(badges).length - order.length;
 
   var html = '';
 
   // ── header: name, school + conference + both RPI figures, listed position ──
   html += '<div class="player-header">' +
     '<div class="player-name">' + p._name + '</div>' +
-    '<div class="player-sub">' + (t.name || 'Unknown school') + ' · ' + (t.conference || '—') +
+    '<div class="player-sub">' + (t.short_name || t.name || 'Unknown school') + ' · ' +
+      (t.conference_short || t.conference || '—') +
       ((t.rpi_rank || t.conference_rpi)
         ? ' <span style="white-space:nowrap">(' +
             (t.rpi_rank ? 'Team RPI #' + t.rpi_rank : '') +
@@ -1108,6 +1173,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
         rankLine('Team', p.rank_team, p.n_team) +
       '</div></div>' +
     overallExplainer(p, pos, t) +
+    profileBlocks(p) +
     '</div>';
 
   // ── universal stats ──
@@ -1160,7 +1226,9 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   // ── Position Profile — each badge stat with all three percentile scopes,
   // labelled the way the approved template reads: team scope is all positions
   // (with its pool size), conference and national are same-position only.
-  html += '<div class="section-title">Position Profile — ' + (pos || '?') + '</div>';
+  html += '<div class="section-title">Position Profile — ' + (pos || '?') +
+    (missing > 0 ? '<span style="float:right;font-weight:400;font-size:11px;color:var(--muted)">' +
+      missing + ' stat' + (missing > 1 ? 's' : '') + ' not recorded for her</span>' : '') + '</div>';
   order.forEach(function(key) {
     var b = badges[key];
     if (!b) return;
@@ -1176,21 +1244,45 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div></div>';
   });
 
+  // ── Honours — the recruiting app shows youth awards on a player card and
+  // this had no equivalent. Ordered newest first, All-America above All-Region
+  // above All-Conference, because that is the order a coach reads them in.
+  var aw = (awardsByPlayer[p.unified_id] || []).slice().sort(function(a, b) {
+    if (a.season !== b.season) return (b.season || '').localeCompare(a.season || '');
+    var rank = { all_america: 0, all_region: 1, all_conference: 2 };
+    return (rank[a.award_type] || 3) - (rank[b.award_type] || 3);
+  });
+  if (aw.length) {
+    var NAME = { all_america: 'All-American', all_region: 'All-Region',
+                 all_conference: 'All-Conference' };
+    var LVL = { first: '1st Team', second: '2nd Team', third: '3rd Team', fourth: '4th Team' };
+    html += '<div class="section-title">Honours</div><div class="hist-wrap">' +
+      aw.map(function(a) {
+        var nm = NAME[a.award_type] || a.award_type;
+        return '<div class="aw-row">' +
+          '<span class="aw-yr">' + seasonYear(a.season) + '</span>' +
+          '<span class="aw-badge' + (a.award_type === 'all_america' ? ' aw-aa' : '') + '">' +
+            nm + '</span>' +
+          '<span>' + (LVL[a.award_level] || a.award_level || '') +
+            (a.region ? ' · ' + a.region : '') + '</span></div>';
+      }).join('') + '</div>';
+  }
+
   // ── Season-by-School history, as a table (matches the template) ──
   if (rowsForPlayer.length) {
     var keyStat = order.length ? order[0] : null;
     var keyLbl  = keyStat && badges[keyStat] ? shortLabel(badges[keyStat].label) : '';
     html += '<div class="section-title">Season-by-School History</div>' +
       '<div class="hist-wrap"><table class="hist">' +
-      '<thead><tr><th>Season</th><th>School</th><th>Conf</th>' +
-      '<th>GP</th><th>Min</th><th>Gls</th><th>Ast</th>' +
+      '<thead><tr><th>Year</th><th>School</th><th>Conf</th>' +
+      '<th>GP</th><th>Min</th><th>G</th><th>A</th>' +
       (keyLbl ? '<th>' + keyLbl + '</th>' : '') + '</tr></thead><tbody>' +
       rowsForPlayer.map(function(r) {
         var rt = teamsById[r.team_id] || {};
         var ks = keyStat && r.badge_stats ? r.badge_stats[keyStat] : null;
         return '<tr' + (r === p ? ' class="cur"' : '') + '>' +
-          '<td>' + r.season + '</td>' +
-          '<td class="school">' + (rt.name || '—') + '</td>' +
+          '<td>' + seasonYear(r.season) + '</td>' +
+          '<td class="school">' + (rt.short_name || rt.name || '—') + '</td>' +
           '<td>' + (rt.conference_short || rt.conference || '—') + '</td>' +
           '<td>' + (r.matches_played != null ? r.matches_played : '—') + '</td>' +
           '<td>' + (r.minutes != null ? r.minutes.toLocaleString() : '—') + '</td>' +
@@ -1198,7 +1290,21 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
           '<td>' + (r.assists != null ? r.assists : '—') + '</td>' +
           (keyLbl ? '<td>' + (ks && ks.v != null ? ks.v.toFixed(2) : '—') + '</td>' : '') +
           '</tr>';
-      }).join('') + '</tbody></table></div>' +
+      }).join('') +
+      // Career totals. Only the counting stats add up — a per-90 rate averaged
+      // across seasons of different length would be wrong, so that cell is left
+      // blank rather than filled with a number that means nothing.
+      (rowsForPlayer.length > 1 ? (function() {
+        var sum = function(f) {
+          return rowsForPlayer.reduce(function(a, r) { return a + (r[f] || 0); }, 0);
+        };
+        return '<tr class="tot"><td>Career</td>' +
+          '<td class="school">' + rowsForPlayer.length + ' seasons</td><td>—</td>' +
+          '<td>' + sum('matches_played') + '</td>' +
+          '<td>' + sum('minutes').toLocaleString() + '</td>' +
+          '<td>' + sum('goals') + '</td><td>' + sum('assists') + '</td>' +
+          (keyLbl ? '<td>—</td>' : '') + '</tr>';
+      })() : '') + '</tbody></table></div>' +
       '<div class="hist-note">Rating shown is level-adjusted. Raw (unadjusted) rating this season: ' +
         (p.composite != null ? p.composite.toFixed(1) : 'n/a') +
         (p.team_strength != null ? ' · team strength ' + (p.team_strength * 100).toFixed(0) + '/100' : '') +
@@ -1207,6 +1313,45 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
 
   html += '</div>';
   body.innerHTML = html;
+}
+
+// ── Player Type + UNCW Ready ───────────────────────────────────────────────
+// Both strings are computed in ⚙️ Scripts/build_player_profiles.py from
+// percentiles WITHIN her own position, and stored on the row. Nothing is
+// generated in the browser, so what a coach reads here is reproducible and
+// arguable — if a sentence is wrong, the trait thresholds in that script are the
+// thing to change.
+//
+// player_type_conf is rendered, not hidden. A 200-minute bench player still gets
+// a read because she is exactly who UNCW signs, but presenting that with the
+// same confidence as a full season would be dishonest.
+var ROLE_STYLE = {
+  'all-conference': ['#065f46', '#d1fae5'],
+  'starter':        ['#1e40af', '#dbeafe'],
+  'substitute':     ['#92400e', '#fef3c7'],
+  'bench':          ['#4b5563', '#f3f4f6'],
+  'below level':    ['#991b1b', '#fee2e2']
+};
+function profileBlocks(p) {
+  var h = '';
+  if (p.player_type) {
+    var lowConf = p.player_type_conf === 'low';
+    h += '<div class="pt-block">' +
+      '<div class="pt-head">Player type' +
+        (p.player_type_tag ? '<span class="pt-tag">' + p.player_type_tag + '</span>' : '') +
+        (lowConf ? '<span class="pt-conf">thin sample</span>' : '') +
+      '</div>' +
+      '<div class="pt-body">' + p.player_type + '</div></div>';
+  }
+  if (p.uncw_role) {
+    var c = ROLE_STYLE[p.uncw_role] || ['#4b5563', '#f3f4f6'];
+    h += '<div class="pt-block">' +
+      '<div class="pt-head">UNCW ready' +
+        '<span class="pt-role" style="color:' + c[0] + ';background:' + c[1] + '">' +
+        p.uncw_role + '</span></div>' +
+      '<div class="pt-body">' + (p.uncw_note || '') + '</div></div>';
+  }
+  return h;
 }
 
 // Plain-English explanation of what the Overall number is, built from the
@@ -1334,6 +1479,9 @@ function pctScope(label, val, n) {
 // no-framework convention. Axes are NATIONAL percentiles, not raw values: a
 // CF's xG+xA/90 (~0.6) and headed goals/90 (~0.1) live on different scales, so
 // percentiles put every axis on the same 0-100 footing and the shape reads.
+// "FA2025" is our internal key; a coach reads "2025".
+function seasonYear(s) { return String(s || '').replace(/^FA/, ''); }
+
 function radarSVG(a, b, keys) {
   var cx = 150, cy = 130, R = 95, n = keys.length;
   function pt(i, frac) {

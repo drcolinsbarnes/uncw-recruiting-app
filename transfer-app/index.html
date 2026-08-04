@@ -108,7 +108,11 @@ body {
 .pct-scope-lbl { font-size: 9px; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 2px; }
 .pct-bar-track { height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; }
 .pct-bar-fill { height: 100%; border-radius: 4px; }
-.back-btn { background: none; border: none; color: var(--teal); font-size: 13px; font-weight: 700; cursor: pointer; padding: 0 0 8px; }
+.back-btn { background: var(--teal); border: none; color: var(--gold); font-size: 13px;
+  font-weight: 800; letter-spacing: .3px; cursor: pointer; padding: 8px 18px;
+  border-radius: 22px; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: background .12s, transform .08s; }
+.back-btn:hover { background: #008b86; }
+.back-btn:active { transform: scale(.97); }
 
 /* Team tab — UNCW's own roster, bio profile pulled straight from the
    Recruiting DB (roster_players) so every player shows something even
@@ -301,7 +305,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.6 · player type, UNCW ready, honours</div>
+        <div class="sub">Women's Soccer · v1.7 · honours fix, nav button</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -368,7 +372,7 @@ body {
 
     <!-- ══ Player detail (shown over the Players list) ══ -->
     <div id="screenPlayerDetail" class="screen">
-      <div style="padding:12px 16px 0;"><button class="back-btn" onclick="showScreen('Players')">← Back to Players</button></div>
+      <div style="padding:12px 16px 4px;"><button class="back-btn" onclick="showScreen('Players')">← Back to Players</button></div>
       <div id="playerDetailBody" style="flex:1; overflow-y:auto;"></div>
     </div>
 
@@ -637,14 +641,6 @@ function attachNames() {
       renderPlayers();
       return;
     }
-    careerSupa.from('college_awards')
-      .select('unified_id,season,award_type,award_level,region,award_body')
-      .then(function(r) {
-        (r.data || []).forEach(function(a) {
-          (awardsByPlayer[a.unified_id] = awardsByPlayer[a.unified_id] || []).push(a);
-        });
-      });
-
     careerSupa.from('unified_players').select('unified_id,first,last')
       .in('unified_id', ids.slice(i, i + step))
       .then(function(r) {
@@ -653,6 +649,31 @@ function attachNames() {
       });
   }
   chunk(0);
+  loadAwards(0, {});
+}
+
+// Honours, loaded ONCE and by assignment.
+//
+// This first shipped spliced into the name-paging recursion above, so it re-ran
+// on every 400-id batch and PUSHED each time — C. Regazzoni's single Big Ten
+// second-team award rendered as 30 identical rows on her card. Two rules, both
+// learned the hard way here and on the Team tab's duplicate seasons:
+//   * a fetch that is not per-batch does not belong inside the batch loop;
+//   * accumulate into a LOCAL object and assign at the end, so a re-run replaces
+//     the map rather than appending to it.
+// Also paginated: PostgREST caps every request at 1000 rows and there are 1,255
+// award rows, so a single unpaged call silently dropped the last 255.
+function loadAwards(offset, acc) {
+  var PAGE = 1000;
+  careerSupa.from('college_awards')
+    .select('unified_id,season,award_type,award_level,region,award_body')
+    .range(offset, offset + PAGE - 1)
+    .then(function(r) {
+      var batch = (r.data || []);
+      batch.forEach(function(a) { (acc[a.unified_id] = acc[a.unified_id] || []).push(a); });
+      if (batch.length === PAGE) { loadAwards(offset + PAGE, acc); return; }
+      awardsByPlayer = acc;
+    });
 }
 
 // ── Active-season pool (Colin, Aug 1, 2026) ──────────────────────────────

@@ -247,6 +247,7 @@ body {
 .aw-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 20px;
   background: #fef3c7; color: #92400e; letter-spacing: .2px; }
 .aw-aa { background: #ede9fe; color: #5b21b6; }
+.aw-ind { background: #d1fae5; color: #065f46; }
 .hist tr.tot td { font-weight: 800; border-top: 2px solid var(--navy); background: #f8fafc; }
 .est-mark { font-size: 9px; vertical-align: super; letter-spacing: .3px; }
 .basis-note { background: #fff6e5; border-left: 3px solid #e0a020; color: #6b4d05;
@@ -305,7 +306,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.7 · honours fix, nav button</div>
+        <div class="sub">Women's Soccer · v1.9 · team rankings</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -393,7 +394,25 @@ body {
       <div class="list" id="teamList"></div>
     </div>
     <div id="screenInsights" class="screen"><div class="stub-screen"><div><b>Insights</b>Needs the portal pool (B7) and awards data to be meaningful.</div></div></div>
-    <div id="screenRankings" class="screen"><div class="stub-screen"><div><b>Rankings</b>Needs conference/national percentiles across a full loaded season — works once B4 has real data and this screen gets built out.</div></div></div>
+    <div id="screenRankings" class="screen">
+      <div class="filter-bar">
+        <div class="filter-row">
+          <select id="rTier" onchange="renderRankings()">
+            <option value="">All tiers</option>
+            <option value="P4">P4</option>
+            <option value="High Major">High Major</option>
+            <option value="Mid Major">Mid Major</option>
+            <option value="Low Major">Low Major</option>
+          </select>
+          <select id="rConf" onchange="renderRankings()"><option value="">All Conferences</option></select>
+          <input type="text" id="rSearch" placeholder="Search school…" oninput="renderRankings()">
+        </div>
+      </div>
+      <div class="results-bar" id="rankResultsBar">Loading…</div>
+      <div class="ptable-wrap"><table class="ptable" id="rankTable">
+        <thead id="rankHead"></thead><tbody id="rankBody"></tbody>
+      </table></div>
+    </div>
 
     <nav class="bottom-nav">
       <button class="nav-btn active" onclick="showScreen('Players')" id="navPlayers"><span class="nav-icon">👥</span>Players</button>
@@ -639,6 +658,7 @@ function attachNames() {
       allPlayers.forEach(function(p) { p._name = names[p.unified_id] || p.unified_id; });
       populateSeasonFilter();
       renderPlayers();
+      loadTeamRatings();
       return;
     }
     careerSupa.from('unified_players').select('unified_id,first,last')
@@ -666,7 +686,7 @@ function attachNames() {
 function loadAwards(offset, acc) {
   var PAGE = 1000;
   careerSupa.from('college_awards')
-    .select('unified_id,season,award_type,award_level,region,award_body')
+    .select('unified_id,season,award_type,award_level,region,award_body,listed_pos')
     .range(offset, offset + PAGE - 1)
     .then(function(r) {
       var batch = (r.data || []);
@@ -674,6 +694,102 @@ function loadAwards(offset, acc) {
       if (batch.length === PAGE) { loadAwards(offset + PAGE, acc); return; }
       awardsByPlayer = acc;
     });
+}
+
+// ── Rankings tab — team ratings ──────────────────────────────────────────
+// Rolled up in ⚙️ Scripts/build_team_ratings.py, not here: it is a
+// minutes-weighted mean of the LEVEL-ADJUSTED player rating, which was picked by
+// testing against RPI rather than by preference (-0.74 vs -0.41 for the raw
+// rating). RPI is dominated by strength of schedule, so a team number that
+// ignores level cannot track it.
+var teamRatings = [];
+var rankSortKey = 'rank_overall', rankSortDir = 1;
+
+function loadTeamRatings() {
+  careerSupa.from('team_ratings').select('*').eq('season', CURRENT_SEASON)
+    .then(function(r) {
+      if (r.error) { console.error(r.error); return; }
+      teamRatings = r.data || [];
+      var confs = {};
+      teamRatings.forEach(function(x) {
+        var t = teamsById[x.team_id]; if (t && t.conference_short) confs[t.conference_short] = 1;
+      });
+      var sel = document.getElementById('rConf');
+      sel.innerHTML = '<option value="">All Conferences</option>' +
+        Object.keys(confs).sort().map(function(c) {
+          return '<option value="' + c + '">' + c + '</option>'; }).join('');
+      renderRankings();
+    });
+}
+
+function setRankSort(k) {
+  if (rankSortKey === k) { rankSortDir = -rankSortDir; }
+  else { rankSortKey = k; rankSortDir = (k === 'name' || k.indexOf('rank') === 0) ? 1 : -1; }
+  renderRankings();
+}
+
+function renderRankings() {
+  if (!teamRatings.length) {
+    document.getElementById('rankResultsBar').textContent =
+      'No team ratings yet — run build_team_ratings.py.';
+    return;
+  }
+  var tier = document.getElementById('rTier').value;
+  var conf = document.getElementById('rConf').value;
+  var q = document.getElementById('rSearch').value.toLowerCase().trim();
+
+  var rows = teamRatings.filter(function(x) {
+    var t = teamsById[x.team_id] || {};
+    if (tier && t.tier !== tier) return false;
+    if (conf && t.conference_short !== conf) return false;
+    if (q && ((t.short_name || t.name || '').toLowerCase().indexOf(q) < 0)) return false;
+    return true;
+  });
+  rows.sort(function(a, b) {
+    var t1 = teamsById[a.team_id] || {}, t2 = teamsById[b.team_id] || {};
+    var x, y;
+    if (rankSortKey === 'name') { x = t1.short_name || ''; y = t2.short_name || ''; return x.localeCompare(y) * rankSortDir; }
+    if (rankSortKey === 'rpi_rank') { x = t1.rpi_rank; y = t2.rpi_rank; }
+    else { x = a[rankSortKey]; y = b[rankSortKey]; }
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (x - y) * rankSortDir;
+  });
+
+  document.getElementById('rankResultsBar').textContent =
+    rows.length + ' teams · ' + CURRENT_SEASON.replace('FA', '') + ' · minutes-weighted player ratings';
+
+  var cols = [
+    { k: 'name',     t: 'Team',    cls: 'col-name' },
+    { k: 'overall',  t: 'Overall', cls: 'col-rating' },
+    { k: 'attack',   t: 'Attack'  },
+    { k: 'defense',  t: 'Defense' },
+    { k: 'rpi_rank', t: 'RPI'     }
+  ];
+  document.getElementById('rankHead').innerHTML = '<tr>' + cols.map(function(c) {
+    var on = rankSortKey === c.k;
+    return '<th class="' + (c.cls || '') + (on ? ' sorted' : '') + '" onclick="setRankSort(\'' + c.k + '\')">' +
+      c.t + (on ? '<span class="arrow">' + (rankSortDir < 0 ? '▼' : '▲') + '</span>' : '') + '</th>';
+  }).join('') + '</tr>';
+
+  document.getElementById('rankBody').innerHTML = rows.map(function(x) {
+    var t = teamsById[x.team_id] || {};
+    // n_attack / n_defense are shown when thin, because an Attack number built
+    // from three players is not the same claim as one built from ten.
+    var thin = function(v, n) {
+      if (v == null) return '<td class="unrated">—</td>';
+      return '<td>' + Math.round(v) +
+        (n != null && n < 4 ? '<div class="sub">' + n + ' plyrs</div>' : '') + '</td>';
+    };
+    return '<tr>' +
+      '<td class="col-name"><span class="pos-tag">' + (x.rank_overall || '—') + '</span>' +
+        '<b>' + (t.short_name || t.name || '—') + '</b>' +
+        '<div class="sub">' + (t.conference_short || '') +
+          (t.tier ? ' · ' + t.tier : '') + '</div></td>' +
+      '<td class="col-rating rating">' + (x.overall == null ? '—' : Math.round(x.overall)) + '</td>' +
+      thin(x.attack, x.n_attack) + thin(x.defense, x.n_defense) +
+      '<td>' + (t.rpi_rank || '—') + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">No teams match.</td></tr>';
 }
 
 // ── Active-season pool (Colin, Aug 1, 2026) ──────────────────────────────
@@ -1270,22 +1386,37 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   // above All-Conference, because that is the order a coach reads them in.
   var aw = (awardsByPlayer[p.unified_id] || []).slice().sort(function(a, b) {
     if (a.season !== b.season) return (b.season || '').localeCompare(a.season || '');
-    var rank = { all_america: 0, all_region: 1, all_conference: 2 };
+    var rank = { all_america: 0, all_region: 1, conference_individual: 2, all_conference: 3 };
     return (rank[a.award_type] || 3) - (rank[b.award_type] || 3);
   });
   if (aw.length) {
-    var NAME = { all_america: 'All-American', all_region: 'All-Region',
-                 all_conference: 'All-Conference' };
-    var LVL = { first: '1st Team', second: '2nd Team', third: '3rd Team', fourth: '4th Team' };
+    // Read it the way a coach says it out loud: who gave it, then what it was.
+    // "CAA · 1st Team All-Conference", "USC · 2nd Team All-Region".
+    //
+    // Individual conference awards carry their real name in listed_pos
+    // ("Attacking Player of the Year", "Goalkeeper of the Year"). The row used to
+    // render the literal word "individual", which told you nothing.
+    var LVL = { first: '1st Team', second: '2nd Team', third: '3rd Team',
+                fourth: '4th Team', all_rookie: 'All-Rookie Team' };
     html += '<div class="section-title">Honours</div><div class="hist-wrap">' +
       aw.map(function(a) {
-        var nm = NAME[a.award_type] || a.award_type;
+        var body = a.award_body || '';
+        var txt, cls = '';
+        if (a.award_type === 'conference_individual') {
+          txt = a.listed_pos || 'Individual award'; cls = ' aw-ind';
+        } else if (a.award_type === 'all_conference') {
+          txt = (a.award_level === 'all_rookie') ? 'All-Rookie Team'
+              : ((LVL[a.award_level] || '') + ' All-Conference');
+        } else if (a.award_type === 'all_region') {
+          txt = (LVL[a.award_level] || '') + ' All-Region' +
+                (a.region ? ' (' + a.region + ')' : '');
+        } else if (a.award_type === 'all_america') {
+          txt = (LVL[a.award_level] || '') + ' All-American'; cls = ' aw-aa';
+        } else { txt = a.award_type; }
         return '<div class="aw-row">' +
           '<span class="aw-yr">' + seasonYear(a.season) + '</span>' +
-          '<span class="aw-badge' + (a.award_type === 'all_america' ? ' aw-aa' : '') + '">' +
-            nm + '</span>' +
-          '<span>' + (LVL[a.award_level] || a.award_level || '') +
-            (a.region ? ' · ' + a.region : '') + '</span></div>';
+          '<span class="aw-badge' + cls + '">' + body + '</span>' +
+          '<span>' + txt.trim() + '</span></div>';
       }).join('') + '</div>';
   }
 

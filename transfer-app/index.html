@@ -240,6 +240,12 @@ body {
 .pt-conf { font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
   color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 20px; }
 .pt-body { font-size: 12.5px; line-height: 1.5; color: var(--navy); }
+.sl-btn { background: #fff; border: 1.5px solid var(--teal); color: var(--teal); font-size: 12.5px;
+  font-weight: 800; padding: 6px 14px; border-radius: 20px; cursor: pointer; }
+.sl-btn.on { background: var(--teal); color: var(--gold); border-color: var(--teal); }
+.sl-lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+.sl-date { font-size: 12px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; color: var(--navy); }
 .aw-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px;
   padding: 5px 0; border-bottom: 1px solid var(--border); }
 .aw-row:last-child { border-bottom: 0; }
@@ -306,7 +312,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v1.9 · team rankings</div>
+        <div class="sub">Women's Soccer · v2.0 · shortlist, visits, team filter</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -346,6 +352,7 @@ body {
             <option value="900">900+ min</option>
             <option value="1200">1200+ min</option>
           </select>
+          <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
           <select id="fXfer" onchange="renderPlayers()">
             <option value="">Any transfer history</option>
             <option value="active">In the portal now</option>
@@ -381,8 +388,16 @@ body {
          sequencing: Shortlist/Visits need interest-tracking on portal_players
          (waiting on B7), Team needs UNCW roster linked to the Career DB,
          Insights/Rankings need the portal pool + awards scrape. ══ -->
-    <div id="screenShortlist" class="screen"><div class="stub-screen"><div><b>Shortlist</b>Needs portal player tracking (B7) — not run yet, by Colin's choice, until the NCAA player pool is assessed first.</div></div></div>
-    <div id="screenVisits" class="screen"><div class="stub-screen"><div><b>Visits</b>Same as Shortlist — waiting on B7.</div></div></div>
+    <div id="screenShortlist" class="screen">
+      <div class="results-bar" id="shortResultsBar">Loading…</div>
+      <div class="ptable-wrap"><table class="ptable"><thead id="shortHead"></thead>
+        <tbody id="shortBody"></tbody></table></div>
+    </div>
+    <div id="screenVisits" class="screen">
+      <div class="results-bar" id="visitResultsBar">Loading…</div>
+      <div class="ptable-wrap"><table class="ptable"><thead id="visitHead"></thead>
+        <tbody id="visitBody"></tbody></table></div>
+    </div>
     <!-- ══ Team tab — UNCW's own roster (July 31, 2026: link_uncw_roster.py
          has now run, 21/32 linked). Bio profile always comes from the
          Recruiting DB roster_players table so incoming freshmen with no
@@ -419,7 +434,7 @@ body {
       <button class="nav-btn" onclick="showScreen('Shortlist')" id="navShortlist"><span class="nav-icon">★</span>Shortlist</button>
       <button class="nav-btn" onclick="showScreen('Visits')" id="navVisits"><span class="nav-icon">🏠</span>Visits</button>
       <button class="nav-btn" onclick="showScreen('Team')" id="navTeam"><span class="nav-icon">👕</span>Team</button>
-      <button class="nav-btn" onclick="showScreen('Insights')" id="navInsights"><span class="nav-icon">📊</span>Insights</button>
+      <button class="nav-btn" onclick="showScreen('Insights')" id="navInsights" style="display:none"><span class="nav-icon">📊</span>Insights</button>
       <button class="nav-btn" onclick="showScreen('Rankings')" id="navRankings"><span class="nav-icon">🏆</span>Rankings</button>
     </nav>
   </div>
@@ -518,6 +533,10 @@ function showScreen(name) {
     var btn = document.getElementById('nav' + s);
     if (btn) btn.classList.toggle('active', s === name);
   });
+  // Render on entry rather than on load — these two read interestByPlayer,
+  // which arrives asynchronously and changes every time a card is edited.
+  if (name === 'Shortlist') renderShortlist();
+  if (name === 'Visits')    renderVisits();
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────
@@ -568,6 +587,75 @@ var teamsById = {};
 // unified_id -> [award rows]. Same independent ground truth the defensive
 // profiles were validated against; on the card it is simply the honours list.
 var awardsByPlayer = {};
+
+// unified_id -> recruiting_interest row for UNCW. The ONLY table this app
+// writes to; everything else here is script-generated and read-only.
+var interestByPlayer = {};
+
+function loadInterest() {
+  if (!UNCW_SCHOOL_ID) return;
+  careerSupa.from('recruiting_interest').select('*').eq('school_id', UNCW_SCHOOL_ID)
+    .then(function(r) {
+      if (r.error) { console.warn('interest load', r.error.message); return; }
+      var acc = {};
+      (r.data || []).forEach(function(x) { acc[x.unified_id] = x; });
+      interestByPlayer = acc;
+      if (document.getElementById('screenShortlist').classList.contains('active')) renderShortlist();
+      if (document.getElementById('screenVisits').classList.contains('active')) renderVisits();
+    });
+}
+
+// Upsert one player's interest row, then re-render whatever is on screen.
+// Optimistic: the local copy updates first so the button responds immediately,
+// and a failed write logs rather than silently reverting.
+function setInterest(uid, patch) {
+  var cur = interestByPlayer[uid] || { unified_id: uid, school_id: UNCW_SCHOOL_ID };
+  var row = Object.assign({}, cur, patch);
+  delete row.created_at; delete row.updated_at;
+  interestByPlayer[uid] = row;
+  refreshInterestUI(uid);
+  careerSupa.from('recruiting_interest').upsert(row, { onConflict: 'unified_id,school_id' })
+    .then(function(r) {
+      if (r.error) { console.error('interest save failed', r.error); alert('Could not save: ' + r.error.message); }
+    });
+}
+
+function toggleShortlist(uid) {
+  var cur = interestByPlayer[uid] || {};
+  setInterest(uid, { is_shortlisted: !cur.is_shortlisted,
+                     shortlisted_at: cur.is_shortlisted ? null : new Date().toISOString() });
+}
+function setVisit(uid, date, type) {
+  setInterest(uid, { visit_date: date || null, visit_type: date ? (type || 'unofficial') : null });
+}
+function refreshInterestUI(uid) {
+  var el = document.getElementById('interestBlock');
+  if (el && el.dataset.uid === uid) el.outerHTML = interestBlock(uid);
+  if (document.getElementById('screenShortlist').classList.contains('active')) renderShortlist();
+  if (document.getElementById('screenVisits').classList.contains('active')) renderVisits();
+}
+
+// The card's action strip. Sits under the rating so a decision is the first
+// thing available after the read, not buried below the stats.
+function interestBlock(uid) {
+  var i = interestByPlayer[uid] || {};
+  var on = !!i.is_shortlisted;
+  return '<div class="pt-block" id="interestBlock" data-uid="' + uid + '">' +
+    '<div class="pt-head">My list</div>' +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<button class="sl-btn' + (on ? ' on' : '') + '" onclick="toggleShortlist(\'' + uid + '\')">' +
+        (on ? '★ Shortlisted' : '☆ Add to shortlist') + '</button>' +
+      '<label class="sl-lbl">Visit</label>' +
+      '<input type="date" class="sl-date" value="' + (i.visit_date || '') + '" ' +
+        'onchange="setVisit(\'' + uid + '\', this.value, document.getElementById(\'vType\').value)">' +
+      '<select id="vType" class="sl-date" onchange="setVisit(\'' + uid + '\', ' +
+        'document.querySelector(\'.sl-date\').value, this.value)">' +
+        ['unofficial','official','campus','virtual'].map(function(v) {
+          return '<option value="' + v + '"' + (i.visit_type === v ? ' selected' : '') + '>' + v + '</option>';
+        }).join('') +
+      '</select>' +
+    '</div></div>';
+}
 
 var sortKey = 'composite_adj';
 var sortDir = -1;          // -1 = descending; rating high-to-low is the default
@@ -657,8 +745,10 @@ function attachNames() {
     if (i >= ids.length) {
       allPlayers.forEach(function(p) { p._name = names[p.unified_id] || p.unified_id; });
       populateSeasonFilter();
+      populateTeamFilter();
       renderPlayers();
       loadTeamRatings();
+      loadInterest();
       return;
     }
     careerSupa.from('unified_players').select('unified_id,first,last')
@@ -694,6 +784,71 @@ function loadAwards(offset, acc) {
       if (batch.length === PAGE) { loadAwards(offset + PAGE, acc); return; }
       awardsByPlayer = acc;
     });
+}
+
+// Shortlist and Visits are the same list read two ways — one filtered on the
+// star, one on a visit date and sorted by how soon it is.
+function interestRows(pred) {
+  var out = [];
+  Object.keys(interestByPlayer).forEach(function(uid) {
+    var i = interestByPlayer[uid];
+    if (!pred(i)) return;
+    var p = allPlayers.filter(function(x) {
+      return x.unified_id === uid && x.season === CURRENT_SEASON; })[0] ||
+            allPlayers.filter(function(x) { return x.unified_id === uid; })[0];
+    if (p) out.push({ p: p, i: i });
+  });
+  return out;
+}
+
+function interestTable(rows, headEl, bodyEl, barEl, extraHead, extraCell, empty) {
+  document.getElementById(barEl).textContent = rows.length + ' players';
+  document.getElementById(headEl).innerHTML =
+    '<tr><th class="col-name">Player</th><th class="col-rating">Rating</th>' +
+    '<th>Pos</th>' + extraHead + '</tr>';
+  document.getElementById(bodyEl).innerHTML = rows.map(function(x) {
+    var t = teamsById[x.p.team_id] || {};
+    return '<tr onclick="openPlayerDetail(\'' + x.p.unified_id + '\',\'' + x.p.season + '\',' +
+        (x.p.team_id || 'null') + ')">' +
+      '<td class="col-name"><b>' + x.p._name + '</b><div class="sub">' +
+        (t.short_name || t.name || '—') + (t.conference_short ? ' · ' + t.conference_short : '') +
+        '</div></td>' +
+      '<td class="col-rating rating">' +
+        (x.p.composite_adj == null ? '—' : Math.round(x.p.composite_adj)) + '</td>' +
+      '<td>' + (x.p.primary_pos || '?') + '</td>' + extraCell(x) + '</tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">' +
+      empty + '</td></tr>';
+}
+
+function renderShortlist() {
+  var rows = interestRows(function(i) { return i.is_shortlisted; })
+    .sort(function(a, b) { return (b.p.composite_adj || 0) - (a.p.composite_adj || 0); });
+  interestTable(rows, 'shortHead', 'shortBody', 'shortResultsBar',
+    '<th>Visit</th><th>Level</th>',
+    function(x) { return '<td>' + (x.i.visit_date || '—') + '</td><td>' +
+      ((teamsById[x.p.team_id] || {}).tier || '—') + '</td>'; },
+    'No one shortlisted yet — open a player and press ☆ Add to shortlist.');
+}
+
+function renderVisits() {
+  var rows = interestRows(function(i) { return !!i.visit_date; })
+    .sort(function(a, b) { return (a.i.visit_date || '').localeCompare(b.i.visit_date || ''); });
+  interestTable(rows, 'visitHead', 'visitBody', 'visitResultsBar',
+    '<th>Date</th><th>Type</th>',
+    function(x) { return '<td>' + (x.i.visit_date || '—') + '</td><td>' +
+      (x.i.visit_type || '—') + '</td>'; },
+    'No visits booked — set a date on a player card.');
+}
+
+function populateTeamFilter() {
+  var seen = {};
+  allPlayers.forEach(function(p) {
+    var t = teamsById[p.team_id];
+    if (t) seen[p.team_id] = t.short_name || t.name;
+  });
+  var opts = Object.keys(seen).sort(function(a, b) { return seen[a].localeCompare(seen[b]); });
+  document.getElementById('fTeam').innerHTML = '<option value="">All Teams</option>' +
+    opts.map(function(id) { return '<option value="' + id + '">' + seen[id] + '</option>'; }).join('');
 }
 
 // ── Rankings tab — team ratings ──────────────────────────────────────────
@@ -841,6 +996,7 @@ function clearFilters() {
   document.getElementById('fMin').value    = '450';
   document.getElementById('fRpi').value    = '';
   document.getElementById('fXfer').value   = '';
+  document.getElementById('fTeam').value   = '';
   document.getElementById('fSearch').value = '';
   sortKey = 'composite_adj'; sortDir = -1;
   renderPlayers();
@@ -854,6 +1010,7 @@ function filteredPlayers() {
   var minMin = parseInt(document.getElementById('fMin').value, 10) || 0;
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
   var xfer   = document.getElementById('fXfer').value;
+  var teamF  = document.getElementById('fTeam').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
   return allPlayers.filter(function(p) {
@@ -870,6 +1027,7 @@ function filteredPlayers() {
     if (minMin && (p.minutes || 0) < minMin) return false;
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
     if (xfer && p.transfer_history !== xfer) return false;
+    if (teamF && String(p.team_id) !== teamF) return false;
     if (q) {
       var hay = (p._name + ' ' + ((t && t.name) || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -1111,9 +1269,9 @@ var teamRoster = [];
 
 function renderTeam(roster) {
   teamRoster = roster;
-  var rated = roster.filter(function(r) { return r.staff_rating != null; }).length;
+  var rated = roster.filter(function(r) { return bestComposite(r) != null; }).length;
   document.getElementById('teamResultsBar').textContent =
-    roster.length + ' players · ' + rated + ' with a staff rating · tap for full profile';
+    roster.length + ' players · ' + rated + ' rated · sorted by rating within position';
 
   var groups = {};
   roster.forEach(function(r) {
@@ -1126,18 +1284,20 @@ function renderTeam(roster) {
     .concat(Object.keys(groups).filter(function(p) { return POS_ORDER.indexOf(p) < 0; }));
 
   var html = order.map(function(pos) {
+    // Our rating leads the sort now; the staff number only breaks ties among
+    // players who have no college season yet (freshmen), where it is all we have.
     var players = groups[pos].sort(function(a, b) {
-      var as = a.staff_rating, bs = b.staff_rating;
-      if (as == null && bs == null) {
-        var ac = bestComposite(a), bc = bestComposite(b);
-        if (ac == null && bc == null) return (a.last || '').localeCompare(b.last || '');
-        if (ac == null) return 1;
-        if (bc == null) return -1;
-        return bc - ac;
+      var ac = bestComposite(a), bc = bestComposite(b);
+      if (ac == null && bc == null) {
+        var as = a.staff_rating, bs = b.staff_rating;
+        if (as == null && bs == null) return (a.last || '').localeCompare(b.last || '');
+        if (as == null) return 1;
+        if (bs == null) return -1;
+        return bs - as;
       }
-      if (as == null) return 1;
-      if (bs == null) return -1;
-      return bs - as;
+      if (ac == null) return 1;
+      if (bc == null) return -1;
+      return bc - ac;
     });
     return '<div class="team-group-label">' + pos + ' <span style="font-weight:400">(' + players.length + ')</span></div>' +
       players.map(renderRosterCard).join('');
@@ -1164,10 +1324,10 @@ function renderRosterCard(r) {
                     .filter(Boolean).join(' · ');
   var comp = bestComposite(r);
 
-  var rating = r.staff_rating != null
-    ? '<div class="rc-rating">' + r.staff_rating.toFixed(1) + '<div class="rc-rating-lbl">staff</div></div>'
-    : (comp != null
-        ? '<div class="rc-rating alt">' + comp.toFixed(0) + '<div class="rc-rating-lbl">stat</div></div>'
+  var rating = comp != null
+    ? '<div class="rc-rating">' + Math.round(comp) + '<div class="rc-rating-lbl">rating</div></div>'
+    : (r.staff_rating != null
+        ? '<div class="rc-rating alt">' + r.staff_rating.toFixed(1) + '<div class="rc-rating-lbl">staff</div></div>'
         : '<div class="rc-rating none">—</div>');
 
   return '<div class="roster-card slim" onclick="openRosterDetail(' + r.id + ')">' +
@@ -1311,6 +1471,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div></div>' +
     overallExplainer(p, pos, t) +
     profileBlocks(p) +
+    interestBlock(p.unified_id) +
     '</div>';
 
   // ── universal stats ──

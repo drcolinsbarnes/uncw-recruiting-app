@@ -587,6 +587,9 @@ var teamsById = {};
 // unified_id -> [award rows]. Same independent ground truth the defensive
 // profiles were validated against; on the card it is simply the honours list.
 var awardsByPlayer = {};
+// Box-score season totals (every match) per player, fetched on first open. The Wyscout export only holds
+// conference matches, so GP/Min/Gls/Ast on the card come from here when a row exists. undefined = not fetched.
+var boxCache = {};
 
 // unified_id -> recruiting_interest row for UNCW. The ONLY table this app
 // writes to; everything else here is script-generated and read-only.
@@ -1412,12 +1415,29 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   var body = document.getElementById('playerDetailBody');
   body.innerHTML = '<div class="loading-note">Loading…</div>';
 
+  if (careerSupa && boxCache[unifiedId] === undefined) {
+    boxCache[unifiedId] = null;                      // in flight; re-enter once the rows are back
+    var again = function(rows) { boxCache[unifiedId] = rows || []; openPlayerDetail(unifiedId, season, teamId, roster); };
+    careerSupa.from('boxscore_season_stats').select('*').eq('unified_id', unifiedId)
+      .then(function(r) { again(r && r.data); }, function() { again([]); });
+    return;
+  }
+
   var rowsForPlayer = allPlayers.filter(function(p) { return p.unified_id === unifiedId; })
     .sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
   var p = rowsForPlayer.filter(function(r) {
     return r.season === season && (teamId == null || r.team_id === teamId);
   })[0] || rowsForPlayer[rowsForPlayer.length - 1];
   if (!p) { body.innerHTML = '<div class="loading-note">Player not found.</div>'; return; }
+
+  // Box-score season row for a Wyscout row (same season + team). Wyscout is conference matches only, so where a
+  // box-score row exists its GP / Min / G / A replace the Wyscout numbers; ratings stay Wyscout-based.
+  var boxRows = boxCache[unifiedId] || [];
+  var bxRow = function(r) {
+    return boxRows.filter(function(b) { return b.season === r.season && b.team_id === r.team_id; })[0];
+  };
+  var sv = function(r, wf, bf) { var b = bxRow(r); return (b && b[bf] != null) ? b[bf] : r[wf]; };
+  var bp = bxRow(p);
 
   var t = teamsById[p.team_id] || {};
   var pos = p.primary_pos;
@@ -1479,12 +1499,16 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   // only 16 of 15,367 rows have matches_started, all hand-entered box scores.
   // Min/GP answers the same question (is she a starter?) from data we actually
   // have: ~90 means a full-time starter, ~30 means a sub.
-  var mpg = (p.minutes != null && p.matches_played) ? Math.round(p.minutes / p.matches_played) : null;
+  var uGP = sv(p, 'matches_played', 'gp'), uMin = sv(p, 'minutes', 'minutes');
+  var mpg = (uMin != null && uGP) ? Math.round(uMin / uGP) : null;
   html += '<div class="universal-stats">' +
-    ustat(p.matches_played, 'GP') + ustat(mpg, 'Min/GP') +
-    ustat(p.minutes != null ? p.minutes.toLocaleString() : null, 'Min') +
-    ustat(p.goals, 'Gls') + ustat(p.assists, 'Ast') +
-    '</div>';
+    ustat(uGP, 'GP') + ustat(mpg, 'Min/GP') +
+    ustat(uMin != null ? uMin.toLocaleString() : null, 'Min') +
+    ustat(sv(p, 'goals', 'goals'), 'Gls') + ustat(sv(p, 'assists', 'assists'), 'Ast') +
+    '</div>' +
+    '<div class="hist-note" style="margin:2px 0 6px">' + (bp
+      ? 'GP, minutes, goals and assists: every match (box scores).'
+      : 'GP, minutes, goals and assists: conference matches only (Wyscout) — box scores not linked yet.') + '</div>';
 
   html += '<div class="badges-section">';
 
@@ -1582,7 +1606,13 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   }
 
   // ── Season-by-School history, as a table (matches the template) ──
-  if (rowsForPlayer.length) {
+  // History rows: the Wyscout rows plus any box-score seasons Wyscout has no row for (e.g. 2022-23 or a transfer's old school).
+  var hist = rowsForPlayer.concat(boxRows.filter(function(b) {
+      return !rowsForPlayer.some(function(r) { return r.season === b.season && r.team_id === b.team_id; });
+    }).map(function(b) { return { season: b.season, team_id: b.team_id, matches_played: b.gp, minutes: b.minutes,
+                                  goals: b.goals, assists: b.assists, badge_stats: null, _boxOnly: true }; }))
+    .sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
+  if (rowsForPlayer.length || hist.length) {
     var keyStat = order.length ? order[0] : null;
     var keyLbl  = keyStat && badges[keyStat] ? shortLabel(badges[keyStat].label) : '';
     html += '<div class="section-title">Season-by-School History</div>' +
@@ -1590,35 +1620,36 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '<thead><tr><th>Year</th><th>School</th><th>Conf</th>' +
       '<th>GP</th><th>Min</th><th>G</th><th>A</th>' +
       (keyLbl ? '<th>' + keyLbl + '</th>' : '') + '</tr></thead><tbody>' +
-      rowsForPlayer.map(function(r) {
+      hist.map(function(r) {
         var rt = teamsById[r.team_id] || {};
         var ks = keyStat && r.badge_stats ? r.badge_stats[keyStat] : null;
         return '<tr' + (r === p ? ' class="cur"' : '') + '>' +
           '<td>' + seasonYear(r.season) + '</td>' +
           '<td class="school">' + (rt.short_name || rt.name || '—') + '</td>' +
           '<td>' + (rt.conference_short || rt.conference || '—') + '</td>' +
-          '<td>' + (r.matches_played != null ? r.matches_played : '—') + '</td>' +
-          '<td>' + (r.minutes != null ? r.minutes.toLocaleString() : '—') + '</td>' +
-          '<td>' + (r.goals != null ? r.goals : '—') + '</td>' +
-          '<td>' + (r.assists != null ? r.assists : '—') + '</td>' +
+          '<td>' + (sv(r, 'matches_played', 'gp') != null ? sv(r, 'matches_played', 'gp') : '—') + '</td>' +
+          '<td>' + (sv(r, 'minutes', 'minutes') != null ? sv(r, 'minutes', 'minutes').toLocaleString() : '—') + '</td>' +
+          '<td>' + (sv(r, 'goals', 'goals') != null ? sv(r, 'goals', 'goals') : '—') + '</td>' +
+          '<td>' + (sv(r, 'assists', 'assists') != null ? sv(r, 'assists', 'assists') : '—') + '</td>' +
           (keyLbl ? '<td>' + (ks && ks.v != null ? ks.v.toFixed(2) : '—') + '</td>' : '') +
           '</tr>';
       }).join('') +
       // Career totals. Only the counting stats add up — a per-90 rate averaged
       // across seasons of different length would be wrong, so that cell is left
       // blank rather than filled with a number that means nothing.
-      (rowsForPlayer.length > 1 ? (function() {
+      (hist.length > 1 ? (function() {
+        var bf = { matches_played: 'gp', minutes: 'minutes', goals: 'goals', assists: 'assists' };
         var sum = function(f) {
-          return rowsForPlayer.reduce(function(a, r) { return a + (r[f] || 0); }, 0);
+          return hist.reduce(function(a, r) { return a + (sv(r, f, bf[f]) || 0); }, 0);
         };
         return '<tr class="tot"><td>Career</td>' +
-          '<td class="school">' + rowsForPlayer.length + ' seasons</td><td>—</td>' +
+          '<td class="school">' + hist.length + ' seasons</td><td>—</td>' +
           '<td>' + sum('matches_played') + '</td>' +
           '<td>' + sum('minutes').toLocaleString() + '</td>' +
           '<td>' + sum('goals') + '</td><td>' + sum('assists') + '</td>' +
           (keyLbl ? '<td>—</td>' : '') + '</tr>';
       })() : '') + '</tbody></table></div>' +
-      '<div class="hist-note">Rating shown is level-adjusted. Raw (unadjusted) rating this season: ' +
+      '<div class="hist-note">GP / Min / G / A are every match (box scores) where available; Wyscout covers conference matches only. Rating shown is level-adjusted. Raw (unadjusted) rating this season: ' +
         (p.composite != null ? p.composite.toFixed(1) : 'n/a') +
         (p.team_strength != null ? ' · team strength ' + (p.team_strength * 100).toFixed(0) + '/100' : '') +
         (p.adj_capped ? ' · <b>adjustment capped</b>' : '') + '</div>';

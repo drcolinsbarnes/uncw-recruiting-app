@@ -594,6 +594,9 @@ var boxCache = {};
 // unified_id -> recruiting_interest row for UNCW. The ONLY table this app
 // writes to; everything else here is script-generated and read-only.
 var interestByPlayer = {};
+var youthLinks = null;   // unified_id -> [youth record + honours], from youth_links.json (static, next to this page)
+fetch('youth_links.json', { cache: 'no-cache' }).then(function(r) { return r.ok ? r.json() : {}; })
+  .then(function(d) { youthLinks = d || {}; }, function() { youthLinks = {}; });
 
 function loadInterest() {
   if (!UNCW_SCHOOL_ID) return;
@@ -967,7 +970,11 @@ var activePool = {};   // unified_id -> true if the player has a CURRENT_SEASON 
 
 function populateSeasonFilter() {
   var seasons = Array.from(new Set(allPlayers.map(function(p) { return p.season; }).filter(Boolean))).sort().reverse();
-  CURRENT_SEASON = seasons[0] || null;
+  // Newest season that has RATINGS. A season holding only box-score rows (load_box_card_rows.py, Nov 18 2026:
+  // every 2026 player before the December Wyscout data) is listed but does not take over as "current".
+  var ratedSeason = {};
+  allPlayers.forEach(function(p) { if (p.composite != null) ratedSeason[p.season] = true; });
+  CURRENT_SEASON = seasons.filter(function(s) { return ratedSeason[s]; })[0] || seasons[0] || null;
 
   activePool = {};
   allPlayers.forEach(function(p) {
@@ -976,7 +983,8 @@ function populateSeasonFilter() {
 
   var sel = document.getElementById('fSeason');
   sel.innerHTML = seasons.map(function(s) {
-    return '<option value="' + s + '">' + s + (s === CURRENT_SEASON ? ' (current)' : ' stats') + '</option>';
+    return '<option value="' + s + '">' + s + (s === CURRENT_SEASON ? ' (current)'
+      : (ratedSeason[s] ? ' stats' : ' box scores (not yet rated)')) + '</option>';
   }).join('');
   sel.value = CURRENT_SEASON;
 }
@@ -1529,7 +1537,10 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div>';
   }
 
-  if (p.composite == null) {
+  if (p.composite == null && p.rating_basis === 'box scores only') {
+    html += '<div class="rc-notes" style="margin-bottom:10px">Not rated yet — her ' + (p.season || '') +
+            ' numbers come from box scores (every match). The rating needs Wyscout data, which arrives in December.</div>';
+  } else if (p.composite == null) {
     html += '<div class="rc-notes" style="margin-bottom:10px">Not rated — under the ' +
             '450-minute qualifying threshold (about five matches). Raw stats above are still real.</div>';
   }
@@ -1603,6 +1614,22 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
           '<span class="aw-badge' + cls + '">' + body + '</span>' +
           '<span>' + txt.trim() + '</span></div>';
       }).join('') + '</div>';
+  }
+
+  // ── Youth career (Nov 18, 2026): her youth record(s) linked in player_id_map, with youth honours.
+  // youth_links.json is written by ⚙️ Scripts/create_boxscore_players.py (--apply or --youth-json); it includes
+  // the graduated classes removed from the recruiting app, recovered under their original CL- ids.
+  var yl = (youthLinks && youthLinks[p.unified_id]) || [];
+  if (yl.length) {
+    html += '<div class="section-title">Youth career</div><div class="hist-wrap">' + yl.map(function(y) {
+      var sub = [y.club, y.league, y.pos, y.grad ? 'Class of ' + y.grad : null].filter(Boolean).join(' · ');
+      return '<div class="aw-row"><span class="aw-yr">' + y.id + '</span><span>' + sub + '</span></div>' +
+        (y.honours || []).map(function(h) {
+          return '<div class="aw-row"><span class="aw-yr">' + seasonYear(h.season) + '</span>' +
+            '<span class="aw-badge">Youth</span><span>' + h.label +
+            (h.detail ? ' <span style="color:var(--muted)">(' + h.detail + ')</span>' : '') + '</span></div>';
+        }).join('');
+    }).join('') + '</div>';
   }
 
   // ── Season-by-School history, as a table (matches the template) ──

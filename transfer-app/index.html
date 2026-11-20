@@ -279,6 +279,11 @@ body {
 .hist th.school, .hist td.school { text-align: left; }
 .hist td.school { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 .hist tr.cur td { background: #e6f7f7; font-weight: 700; }
+.hist td.hon { text-align: left; white-space: normal; min-width: 150px; max-width: 230px; font-size: 10px; color: var(--navy); line-height: 1.35; }
+.hist td.rt { font-weight: 800; }
+.hist td.rt .wys { display: block; font-weight: 400; font-size: 9px; color: var(--muted); }
+.hist td.rt.bench { color: var(--muted); }
+.hist td.rt .tag { font-size: 8px; font-weight: 700; letter-spacing: .3px; margin-left: 2px; }
 .hist-note { font-size: 10px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
 
 /* Honours */
@@ -312,7 +317,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.0 · shortlist, visits, team filter</div>
+        <div class="sub">Women's Soccer · v2.1 · shortlist, visits, team filter, per-season ratings</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -590,6 +595,7 @@ var awardsByPlayer = {};
 // Box-score season totals (every match) per player, fetched on first open. The Wyscout export only holds
 // conference matches, so GP/Min/Gls/Ast on the card come from here when a row exists. undefined = not fetched.
 var boxCache = {};
+var bprCache = {};   // boxscore_player_ratings rows per player (box-score-model rating, every season)
 
 // unified_id -> recruiting_interest row for UNCW. The ONLY table this app
 // writes to; everything else here is script-generated and read-only.
@@ -1426,8 +1432,13 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   if (careerSupa && boxCache[unifiedId] === undefined) {
     boxCache[unifiedId] = null;                      // in flight; re-enter once the rows are back
     var again = function(rows) { boxCache[unifiedId] = rows || []; openPlayerDetail(unifiedId, season, teamId, roster); };
+    var getBpr = function(rows) {
+      careerSupa.from('boxscore_player_ratings').select('*').eq('unified_id', unifiedId)
+        .then(function(r2) { bprCache[unifiedId] = (r2 && r2.data) || []; again(rows); },
+              function() { bprCache[unifiedId] = []; again(rows); });
+    };
     careerSupa.from('boxscore_season_stats').select('*').eq('unified_id', unifiedId)
-      .then(function(r) { again(r && r.data); }, function() { again([]); });
+      .then(function(r) { getBpr(r && r.data); }, function() { getBpr([]); });
     return;
   }
 
@@ -1640,13 +1651,41 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
                                   goals: b.goals, assists: b.assists, badge_stats: null, _boxOnly: true }; }))
     .sort(function(a, b) { return (a.season || '').localeCompare(b.season || ''); });
   if (rowsForPlayer.length || hist.length) {
+    var bprRows = bprCache[p.unified_id] || [];
+    var HLVL = { first: '1st Team', second: '2nd Team', third: '3rd Team', fourth: '4th Team', all_rookie: 'All-Rookie' };
+    var honShort = function(a) {
+      if (a.award_type === 'conference_individual') return a.listed_pos || 'Conference award';
+      if (a.award_type === 'all_conference') return a.award_level === 'all_rookie' ? 'All-Rookie Team' : (HLVL[a.award_level] || '') + ' All-Conf';
+      if (a.award_type === 'all_region') return (HLVL[a.award_level] || '') + ' All-Region';
+      if (a.award_type === 'all_america') return (HLVL[a.award_level] || '') + ' All-American';
+      return a.award_type;
+    };
+    var honRank = { all_america: 0, all_region: 1, conference_individual: 2, all_conference: 3 };
+    var ratingCell = function(r) {
+      var bp = bprRows.filter(function(b) { return b.season === r.season && b.team_id === r.team_id; })[0];
+      var wy = (r.composite_adj != null && r.rating_basis === 'stats') ? Math.round(r.composite_adj) : null;
+      if (!bp) return '<td class="rt">' + (wy != null ? wy : '—') + '</td>';
+      var bench = bp.basis !== 'box scores';
+      var tip = 'Box-score model. Performance ' + (bp.perf_index != null ? Math.round(bp.perf_index) : 'n/a') +
+        ' · band ' + (bp.band_base != null ? Math.round(bp.band_base) : 'n/a') + ' · floor ' + Math.round(bp.program_floor) +
+        ' · team/conf ' + (bp.team_adj >= 0 ? '+' : '') + Number(bp.team_adj).toFixed(1) + ' · honours +' + Number(bp.award_bump).toFixed(1) + ' · ceiling softened for her level, then scaled so 90+ stays rare' +
+        (bp.rpi_rank_used ? ' · RPI #' + bp.rpi_rank_used + (bp.rpi_source === 'estimated' ? ' (estimated)' : '') : '');
+      return '<td class="rt' + (bench ? ' bench' : '') + '" title="' + tip + '">' + Math.round(bp.rating) +
+        (bench ? '<span class="tag">bench</span>' : '') + (bp.rpi_source === 'estimated' ? '<span class="est-mark">est</span>' : '') +
+        (wy != null ? '<span class="wys">Wyscout ' + wy + '</span>' : '') + '</td>';
+    };
+    var honCell = function(r) {
+      var hs = (awardsByPlayer[r.unified_id || p.unified_id] || []).filter(function(a) { return a.season === r.season; })
+        .sort(function(a, b) { return (honRank[a.award_type] != null ? honRank[a.award_type] : 3) - (honRank[b.award_type] != null ? honRank[b.award_type] : 3); });
+      return '<td class="hon">' + (hs.length ? hs.map(function(a) { return (a.award_body ? a.award_body + ' · ' : '') + honShort(a); }).join('<br>') : '') + '</td>';
+    };
     var keyStat = order.length ? order[0] : null;
     var keyLbl  = keyStat && badges[keyStat] ? shortLabel(badges[keyStat].label) : '';
     html += '<div class="section-title">Season-by-School History</div>' +
       '<div class="hist-wrap"><table class="hist">' +
-      '<thead><tr><th>Year</th><th>School</th><th>Conf</th>' +
+      '<thead><tr><th>Year</th><th>School</th><th>Conf</th><th>Rating</th>' +
       '<th>GP</th><th>Min</th><th>G</th><th>A</th>' +
-      (keyLbl ? '<th>' + keyLbl + '</th>' : '') + '</tr></thead><tbody>' +
+      (keyLbl ? '<th>' + keyLbl + '</th>' : '') + '<th style="text-align:left">Honours</th></tr></thead><tbody>' +
       hist.map(function(r) {
         var rt = teamsById[r.team_id] || {};
         var ks = keyStat && r.badge_stats ? r.badge_stats[keyStat] : null;
@@ -1654,12 +1693,13 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
           '<td>' + seasonYear(r.season) + '</td>' +
           '<td class="school">' + (rt.short_name || rt.name || '—') + '</td>' +
           '<td>' + (rt.conference_short || rt.conference || '—') + '</td>' +
+          ratingCell(r) +
           '<td>' + (sv(r, 'matches_played', 'gp') != null ? sv(r, 'matches_played', 'gp') : '—') + '</td>' +
           '<td>' + (sv(r, 'minutes', 'minutes') != null ? sv(r, 'minutes', 'minutes').toLocaleString() : '—') + '</td>' +
           '<td>' + (sv(r, 'goals', 'goals') != null ? sv(r, 'goals', 'goals') : '—') + '</td>' +
           '<td>' + (sv(r, 'assists', 'assists') != null ? sv(r, 'assists', 'assists') : '—') + '</td>' +
           (keyLbl ? '<td>' + (ks && ks.v != null ? ks.v.toFixed(2) : '—') + '</td>' : '') +
-          '</tr>';
+          honCell(r) + '</tr>';
       }).join('') +
       // Career totals. Only the counting stats add up — a per-90 rate averaged
       // across seasons of different length would be wrong, so that cell is left
@@ -1670,13 +1710,13 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
           return hist.reduce(function(a, r) { return a + (sv(r, f, bf[f]) || 0); }, 0);
         };
         return '<tr class="tot"><td>Career</td>' +
-          '<td class="school">' + hist.length + ' seasons</td><td>—</td>' +
+          '<td class="school">' + hist.length + ' seasons</td><td>—</td><td></td>' +
           '<td>' + sum('matches_played') + '</td>' +
           '<td>' + sum('minutes').toLocaleString() + '</td>' +
           '<td>' + sum('goals') + '</td><td>' + sum('assists') + '</td>' +
-          (keyLbl ? '<td>—</td>' : '') + '</tr>';
+          (keyLbl ? '<td>—</td>' : '') + '<td></td></tr>';
       })() : '') + '</tbody></table></div>' +
-      '<div class="hist-note">GP / Min / G / A are every match (box scores) where available; Wyscout covers conference matches only. Rating shown is level-adjusted. Raw (unadjusted) rating this season: ' +
+      '<div class="hist-note">GP / Min / G / A are every match (box scores) where available; Wyscout covers conference matches only. Rating is the box-score model (minutes, goals/assists, tier band, that season\'s team + conference RPI, and that season\'s conference honours) so every year is comparable; where Wyscout also rated her, its number is shown underneath. <i>est</i> = RPI for that year was estimated from box scores, not an NCAA table. Hover a rating for its parts. Wyscout raw (unadjusted) rating this season: ' +
         (p.composite != null ? p.composite.toFixed(1) : 'n/a') +
         (p.team_strength != null ? ' · team strength ' + (p.team_strength * 100).toFixed(0) + '/100' : '') +
         (p.adj_capped ? ' · <b>adjustment capped</b>' : '') + '</div>';

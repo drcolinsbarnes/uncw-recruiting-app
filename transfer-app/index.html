@@ -1783,7 +1783,7 @@ function overallExplainer(p, pos, t) {
     var d = p.composite_adj - p.composite;
     adjNote = Math.abs(d) < 0.5 ? '' :
       ' Adjusted ' + (d > 0 ? '+' : '') + d.toFixed(1) + ' for level of competition' +
-      (t && t.rpi_rank ? ' (team RPI #' + t.rpi_rank + ')' : '') + '.';
+      '.';
   }
   return '<div class="overall-note">National composite across her ' +
     Object.keys(b).length + ' ' + (pos || '') + ' stats' +

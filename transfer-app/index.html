@@ -1145,7 +1145,7 @@ function renderPlayers() {
         var est = p.rating_basis === 'bench (floor only)';
         return '<td class="col-rating rating' + (est ? ' est' : '') + '"' +
           (est ? ' title="Estimate — limited minutes. Based on her programme and how much she plays, not her stats."' : '') +
-          '>' + Math.round(p.composite_adj) + (est ? '<span class="est-mark">est</span>' : '') + '</td>';
+          '>' + Math.round(p.composite_adj) + '</td>';
       }
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);

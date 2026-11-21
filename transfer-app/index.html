@@ -327,7 +327,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.2 · portal paste-in, shortlist, visits, per-season ratings</div>
+        <div class="sub">Women's Soccer · v2.3 · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -819,7 +819,7 @@ function fetchRatingsPage(offset, acc) {
   document.getElementById('playersResultsBar').textContent =
     'Loading players… ' + acc.length;
   careerSupa.from('player_transfer_ratings')
-    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,transfer_history,player_type,player_type_tag,player_type_conf,uncw_role,uncw_note,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
+    .select('unified_id,season,team_id,primary_pos,listed_pos_raw,composite,composite_adj,rating_basis,program_floor,transfer_history,player_type,player_type_tag,player_type_conf,uncw_role,uncw_note,proj_uncw,proj_p4,proj_p4_min,team_strength,adj_capped,rank_nat,rank_nat_adj,n_nat,rank_conf,n_conf,rank_team,n_team,minutes,matches_played,matches_started,goals,assists,badge_stats')
     .range(offset, offset + PAGE - 1)
     .then(function(res) {
       if (res.error) {
@@ -1834,6 +1834,14 @@ function profileBlocks(p) {
         '<span class="pt-role" style="color:' + c[0] + ';background:' + c[1] + '">' +
         p.uncw_role + '</span></div>' +
       '<div class="pt-body">' + (p.uncw_note || '') + '</div></div>';
+  }
+  if (p.proj_uncw != null && p.primary_pos !== 'GK') {
+    h += '<div class="pt-block">' +
+      '<div class="pt-head">Projected at a new school<span class="pt-conf">estimate</span></div>' +
+      '<div class="pt-body">At UNCW about <b>' + Math.round(p.proj_uncw) + '</b>' +
+      (p.proj_p4 != null ? ' &middot; at a typical Power 4 program about <b>' + Math.round(p.proj_p4) + '</b>' +
+        (p.proj_p4_min != null ? ' (around ' + Math.round(p.proj_p4_min / 10) * 10 + ' min)' : '') : '') +
+      '. Production regresses toward the middle when the level changes; across past transfers this projection is off by about 3 rating points.</div></div>';
   }
   return h;
 }

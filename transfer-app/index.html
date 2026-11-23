@@ -522,6 +522,13 @@ function ppParse(text){
   for(var j=hi+1;j<lines.length;j++){
     var c=lines[j].split(delim), r={};
     hdr.forEach(function(k,ix){ if(k) r[k]=(c[ix]||'').replace(/\u00a0/g,' ').trim(); });
+    // Student Status (Active / Withdrawn) is a badge on the NCAA page and its header
+    // does not always copy cleanly, so fall back to any cell that is exactly a status word.
+    if(!/^(active|withdrawn)/i.test(r.student_status||'')){
+      var st=c.map(function(x){return (x||'').replace(/\u00a0/g,' ').trim();})
+              .filter(function(x){return /^(active|withdrawn)$/i.test(x);})[0];
+      if(st) r.student_status=st;
+    }
     if(!r.ncaa_id || !r.last){ bad++; continue; }
     var f=r.first||''; r.mt=/\bMT\b/.test(f); r.first=f.replace(/\bMT\b/g,'').trim();
     r.entered=ppDate(r.entered); r.updated=ppDate(r.updated);
@@ -544,7 +551,7 @@ function portalPaste(commit){
     if(k>=parts.length){ finish(); return; }
     careerSupa.rpc('portal_paste',{p_pass:pass,p_rows:parts[k],p_commit:commit}).then(function(r){
       if(r.error){ document.getElementById('ppPrev').disabled=false; out.innerHTML='<span class="pp-err">'+(/passcode/i.test(r.error.message)?'Wrong passcode.':'Error: '+r.error.message)+'</span>'; return; }
-      var d=r.data; if(!agg){agg=d;} else { ['total','already','new','linked','ambiguous','unlinked','no_school','inserted'].forEach(function(f){agg[f]+=d[f];}); agg.unknown_schools=agg.unknown_schools.concat(d.unknown_schools); agg.ambiguous_rows=agg.ambiguous_rows.concat(d.ambiguous_rows); }
+      var d=r.data; if(!agg){agg=d;} else { ['total','already','new','linked','ambiguous','unlinked','no_school','inserted','updated','withdrawn'].forEach(function(f){agg[f]+=d[f];}); agg.unknown_schools=agg.unknown_schools.concat(d.unknown_schools); agg.ambiguous_rows=agg.ambiguous_rows.concat(d.ambiguous_rows); }
       next(k+1);
     });
   })(0);
@@ -556,7 +563,8 @@ function portalPaste(commit){
     if(agg.no_school){ h+='<p class="pp-warn"><b>'+agg.no_school+' entries have a school we don\'t recognise</b> (saved without a link): '+agg.unknown_schools.slice(0,8).map(function(x){return x.school+' ('+x.n+')';}).join('; ')+'</p>'; }
     if(agg.ambiguous) h+='<p class="pp-warn">'+agg.ambiguous+' share a surname with another player at the same school, so they were not linked: '+agg.ambiguous_rows.slice(0,8).join('; ')+(agg.ambiguous>8?'…':'')+'</p>';
     if(commit){
-      h+='<p><b>✓ Added '+agg.inserted+' entries.</b> The Players tab is refreshing — filter “In the portal now” to see them.</p>';
+      h+='<p><b>✓ Added '+agg.inserted+' entries'+(agg.updated?', updated '+agg.updated+' already on file':'')+'.</b> The Players tab is refreshing — filter “In the portal now” to see them.</p>';
+      if(agg.withdrawn) h+='<p class="pp-warn">'+agg.withdrawn+' of the pasted entries are Withdrawn; they are saved but not counted as in the portal.</p>';
       document.getElementById('ppText').value=''; ppRows=null; try{ loadPlayers(); }catch(e){}
     } else if(agg.new>0){
       h+='<p>Looks right? Click <b>2 · Add to portal</b>.</p>'; document.getElementById('ppSave').disabled=false;

@@ -545,7 +545,7 @@ function portalPaste(commit){
   if(!ppRows || !ppRows.rows.length){ out.innerHTML='<span class="pp-err">No usable rows found.</span>'; return; }
   document.getElementById('ppPrev').disabled=true; document.getElementById('ppSave').disabled=true;
   out.textContent = commit ? 'Saving…' : 'Checking '+ppRows.rows.length+' rows…';
-  var CH=300, parts=[];   // small batches keep each request well under the database time limit for(var i=0;i<ppRows.rows.length;i+=CH) parts.push(ppRows.rows.slice(i,i+CH));
+  var CH=300, parts=[]; /* small batches keep each request well under the database time limit */ for(var i=0;i<ppRows.rows.length;i+=CH) parts.push(ppRows.rows.slice(i,i+CH));
   var agg=null;
   (function next(k){
     if(k>=parts.length){ finish(); return; }
@@ -566,9 +566,12 @@ function portalPaste(commit){
       h+='<p><b>✓ Added '+agg.inserted+' entries'+(agg.updated?', updated '+agg.updated+' already on file':'')+'.</b> The Players tab is refreshing — filter “In the portal now” to see them.</p>';
       if(agg.withdrawn) h+='<p class="pp-warn">'+agg.withdrawn+' of the pasted entries are Withdrawn; they are saved but not counted as in the portal.</p>';
       document.getElementById('ppText').value=''; ppRows=null; try{ loadPlayers(); }catch(e){}
-    } else if(agg.new>0){
-      h+='<p>Looks right? Click <b>2 · Add to portal</b>.</p>'; document.getElementById('ppSave').disabled=false;
-    } else h+='<p>Nothing new to add.</p>';
+    } else {
+      if(agg.withdrawn) h+='<p class="pp-warn">'+agg.withdrawn+' of these are marked Withdrawn.</p>';
+      if(agg.new>0) h+='<p>Looks right? Click <b>2 · Add to portal</b>.</p>';
+      else h+='<p>No new players. Click <b>2 · Add to portal</b> to update Active / Withdrawn and Last Updated for the '+agg.already+' already on file.</p>';
+      document.getElementById('ppSave').disabled = !(agg.total>0);
+    }
     out.innerHTML=h;
   }
 }

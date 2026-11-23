@@ -545,7 +545,7 @@ function portalPaste(commit){
   if(!ppRows || !ppRows.rows.length){ out.innerHTML='<span class="pp-err">No usable rows found.</span>'; return; }
   document.getElementById('ppPrev').disabled=true; document.getElementById('ppSave').disabled=true;
   out.textContent = commit ? 'Saving…' : 'Checking '+ppRows.rows.length+' rows…';
-  var CH=1500, parts=[]; for(var i=0;i<ppRows.rows.length;i+=CH) parts.push(ppRows.rows.slice(i,i+CH));
+  var CH=300, parts=[];   // small batches keep each request well under the database time limit for(var i=0;i<ppRows.rows.length;i+=CH) parts.push(ppRows.rows.slice(i,i+CH));
   var agg=null;
   (function next(k){
     if(k>=parts.length){ finish(); return; }

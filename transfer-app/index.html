@@ -458,7 +458,13 @@ body {
 
 <div class="pp-back" id="ppBack" onclick="if(event.target===this)closePortalPaste()"><div class="pp-box">
   <h2>Add transfer portal entries</h2>
-  <p>Copy the rows from the NCAA portal export (include the header row: NCAA ID, First Name, Last Name, Institution, Initiated Date…) and paste below. Re-pasting the same players is safe — duplicates are skipped.</p>
+  <p>Copy the rows from the NCAA portal export (include the header row: NCAA ID, First Name, Last Name, Institution, Initiated Date…) and paste below. Re-pasting the same players is safe: duplicates are not added twice. To record withdrawals, filter the NCAA site to Withdrawn, copy that list, and pick “Only Withdrawn players” below.</p>
+  <label style="display:block;font-size:13px;font-weight:600;margin:8px 0 4px">What did you copy?</label>
+  <select id="ppKind" onchange="ppReset()" style="width:100%;padding:8px;margin-bottom:8px;font-size:14px">
+    <option value="">The full list (new players are added as Active)</option>
+    <option value="Withdrawn">Only Withdrawn players (NCAA site filtered to Withdrawn)</option>
+    <option value="Active">Only Active players (NCAA site filtered to Active)</option>
+  </select>
   <textarea id="ppText" placeholder="Paste here…" oninput="ppReset()"></textarea>
   <input type="password" id="ppPass" placeholder="Coach passcode" autocomplete="off">
   <div class="pp-row"><button id="ppPrev" onclick="portalPaste(false)">1 · Check</button><button id="ppSave" class="pri" onclick="portalPaste(true)" disabled>2 · Add to portal</button><button onclick="closePortalPaste()">Close</button></div>
@@ -541,7 +547,12 @@ function portalPaste(commit){
   var out=document.getElementById('ppOut'), pass=document.getElementById('ppPass').value;
   if(!pass){ out.innerHTML='<span class="pp-err">Enter the coach passcode.</span>'; return; }
   if(!careerSupa){ out.innerHTML='<span class="pp-err">Database not connected.</span>'; return; }
-  if(!commit){ var pr=ppParse(document.getElementById('ppText').value); if(pr.error){ out.innerHTML='<span class="pp-err">'+pr.error+'</span>'; return; } ppRows=pr; }
+  if(!commit){ var pr=ppParse(document.getElementById('ppText').value); if(pr.error){ out.innerHTML='<span class="pp-err">'+pr.error+'</span>'; return; }
+    // The NCAA page's status badge does not survive copy/paste, so the coach says
+    // which filtered list this is and every row takes that status.
+    var kind=(document.getElementById('ppKind')||{}).value||'';
+    if(kind) pr.rows.forEach(function(r){ r.student_status=kind; });
+    ppRows=pr; }
   if(!ppRows || !ppRows.rows.length){ out.innerHTML='<span class="pp-err">No usable rows found.</span>'; return; }
   document.getElementById('ppPrev').disabled=true; document.getElementById('ppSave').disabled=true;
   out.textContent = commit ? 'Saving…' : 'Checking '+ppRows.rows.length+' rows…';

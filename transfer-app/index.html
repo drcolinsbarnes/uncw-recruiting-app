@@ -684,8 +684,11 @@ var awardsByPlayer = {};
 var boxCache = {};
 var bprCache = {};   // boxscore_player_ratings rows per player (box-score-model rating, every season)
 
-// unified_id -> recruiting_interest row for UNCW. The ONLY table this app
+// unified_id -> transfer_interest row for UNCW. The ONLY table this app
 // writes to; everything else here is script-generated and read-only.
+// Lives in the RECRUITING DB (Nov 22, 2026): coaches sign in there, so writes
+// carry the coach's login. It used to be Career DB recruiting_interest, where
+// every write arrived anonymous -> "permission denied for table recruiting_interest".
 var interestByPlayer = {};
 var youthLinks = null;   // unified_id -> [youth record + honours], from youth_links.json (static, next to this page)
 fetch('youth_links.json', { cache: 'no-cache' }).then(function(r) { return r.ok ? r.json() : {}; })
@@ -693,7 +696,7 @@ fetch('youth_links.json', { cache: 'no-cache' }).then(function(r) { return r.ok 
 
 function loadInterest() {
   if (!UNCW_SCHOOL_ID) return;
-  careerSupa.from('recruiting_interest').select('*').eq('school_id', UNCW_SCHOOL_ID)
+  recruitSupa.from('transfer_interest').select('*').eq('school_id', UNCW_SCHOOL_ID)
     .then(function(r) {
       if (r.error) { console.warn('interest load', r.error.message); return; }
       var acc = {};
@@ -710,10 +713,10 @@ function loadInterest() {
 function setInterest(uid, patch) {
   var cur = interestByPlayer[uid] || { unified_id: uid, school_id: UNCW_SCHOOL_ID };
   var row = Object.assign({}, cur, patch);
-  delete row.created_at; delete row.updated_at;
+  delete row.created_at; delete row.updated_at; delete row.updated_by;
   interestByPlayer[uid] = row;
   refreshInterestUI(uid);
-  careerSupa.from('recruiting_interest').upsert(row, { onConflict: 'unified_id,school_id' })
+  recruitSupa.from('transfer_interest').upsert(row, { onConflict: 'unified_id,school_id' })
     .then(function(r) {
       if (r.error) { console.error('interest save failed', r.error); alert('Could not save: ' + r.error.message); }
     });
@@ -1549,15 +1552,30 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
 
   // Benchmark = our highest-rated player at the same position in this season.
   // Same composite everyone else is scored on, so it re-picks itself each year.
+  // Nov 22, 2026: there is no Wyscout export for 2026, so a 2026 row has no
+  // composite or badge stats and the radar silently vanished. The radar now uses
+  // the player's most recent season that HAS Wyscout data (and our best player at
+  // her position in that same season), and says which season it is.
+  var nBadges = function(r) {
+    var b = r.badge_stats || {};
+    return Object.keys(b).filter(function(k) { return b[k] && b[k].v != null; }).length;
+  };
+  var wy = (p.composite != null && nBadges(p) >= 3) ? p :
+    rowsForPlayer.filter(function(r) { return r.composite != null && r.primary_pos && nBadges(r) >= 3; })
+      .sort(function(a, b) { return (b.season || '').localeCompare(a.season || ''); })[0] || null;
   var bench = null;
-  if (UNCW_TEAM_ID) {
+  if (UNCW_TEAM_ID && wy) {
     var mine = allPlayers.filter(function(r) {
-      return r.team_id === UNCW_TEAM_ID && r.primary_pos === pos &&
-             r.season === p.season && r.composite != null &&
-             r.unified_id !== p.unified_id;
+      return r.team_id === UNCW_TEAM_ID && r.primary_pos === wy.primary_pos &&
+             r.season === wy.season && r.composite != null &&
+             r.unified_id !== wy.unified_id;
     }).sort(function(a, b) { return b.composite - a.composite; });
     bench = mine[0] || null;
   }
+  var wyBadges = (wy && wy.badge_stats) || {};
+  var wyOrder = Object.keys(wyBadges)
+    .filter(function(k) { return wyBadges[k] && wyBadges[k].v != null; })
+    .sort(function(a, b) { return (wyBadges[b].w || 0) - (wyBadges[a].w || 0); });
 
   var badges = p.badge_stats || {};
   var order = Object.keys(badges)
@@ -1634,12 +1652,16 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   }
 
   // ── radar vs our best at the position ──
-  if (bench && p.composite != null && order.length >= 3) {
+  if (bench && wy && wyOrder.length >= 3) {
+    var wySeason = String(wy.season || '').replace(/^FA/, '');
     html += '<div class="badge-label" style="margin-bottom:6px">vs. ' + bench._name +
-            ' <span style="font-weight:400;color:var(--muted)">(our best ' + pos + ')</span></div>' +
-            radarSVG(p, bench, order) +
+            ' <span style="font-weight:400;color:var(--muted)">(our best ' + wy.primary_pos +
+            (wy !== p ? ', ' + wySeason + ' season' : '') + ')</span></div>' +
+            (wy !== p ? '<div class="rc-notes" style="margin-bottom:6px">No Wyscout data for ' +
+              String(p.season || '').replace(/^FA/, '') + ', so this compares ' + wySeason + ' seasons.</div>' : '') +
+            radarSVG(wy, bench, wyOrder) +
             '<div class="pct-scope-lbl" style="justify-content:center;margin-bottom:12px">' +
-              '<span style="color:var(--teal)">■ ' + p._name + ' ' + p.composite.toFixed(1) + '</span>' +
+              '<span style="color:var(--teal)">■ ' + wy._name + ' ' + wy.composite.toFixed(1) + '</span>' +
               '<span style="color:var(--orange)">■ ' + bench._name + ' ' + bench.composite.toFixed(1) + '</span>' +
             '</div>';
   }

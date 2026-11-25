@@ -542,7 +542,8 @@ function ppParse(text){
               .filter(function(x){return /^(active|withdrawn)$/i.test(x);})[0];
       if(st) r.student_status=st;
     }
-    if(!r.ncaa_id || !r.last){ bad++; continue; }
+    // A shifted column (extra tab in a name) puts text in NCAA ID and a date in Last Name; reject it rather than load a corrupt row.
+    if(!r.ncaa_id || !r.last || !/^\d{6,}$/.test(r.ncaa_id) || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(r.last)){ bad++; continue; }
     var f=r.first||''; r.mt=/\bMT\b/.test(f); r.first=f.replace(/\bMT\b/g,'').trim();
     r.entered=ppDate(r.entered); r.updated=ppDate(r.updated);
     if(!r.entered){ bad++; continue; }
@@ -577,7 +578,7 @@ function portalPaste(commit){
     document.getElementById('ppPrev').disabled=false;
     try{localStorage.setItem('ppPass',pass);}catch(e){}
     var h='<div class="big"><div class="stat"><b>'+agg.new+'</b>new</div><div class="stat"><b>'+agg.already+'</b>already in</div><div class="stat"><b>'+agg.linked+'</b>matched to a player</div><div class="stat"><b>'+(agg.unlinked+agg.ambiguous+agg.no_school)+'</b>no stats on file</div></div>';
-    if(ppRows.bad) h+='<p class="pp-warn">'+ppRows.bad+' row(s) skipped — missing NCAA ID, name or date.</p>';
+    if(ppRows.bad) h+='<p class="pp-warn">'+ppRows.bad+' row(s) skipped — missing or misaligned NCAA ID, name or date. Check the paste for extra tabs.</p>';
     if(agg.no_school){ h+='<p class="pp-warn"><b>'+agg.no_school+' entries have a school we don\'t recognise</b> (saved without a link): '+agg.unknown_schools.slice(0,8).map(function(x){return x.school+' ('+x.n+')';}).join('; ')+'</p>'; }
     if(agg.ambiguous) h+='<p class="pp-warn">'+agg.ambiguous+' share a surname with another player at the same school, so they were not linked: '+agg.ambiguous_rows.slice(0,8).join('; ')+(agg.ambiguous>8?'…':'')+'</p>';
     if(commit){

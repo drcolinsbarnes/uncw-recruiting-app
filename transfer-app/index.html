@@ -914,11 +914,13 @@ function attachNames() {
     if (i >= ids.length) {
       allPlayers.forEach(function(p) { p._name = names[p.unified_id] || p.unified_id; });
       populateSeasonFilter();
+      addPortalStubs(function() {
       populateTeamFilter();
       renderPlayers();
       loadTeamRatings();
       loadInterest();
       loadEmailInterest();
+      });
       return;
     }
     careerSupa.from('unified_players').select('unified_id,first,last')
@@ -1130,6 +1132,51 @@ function renderRankings() {
 // automatically and 2025 drops to being history — no code change needed, which
 // is exactly the handover Colin described.
 var CURRENT_SEASON = null;
+// Portal entries with no displayable rating row (not linked to a player, ambiguous, or no current-season row)
+// still have to be findable — Nov 25, 2026. They become stub rows flagged _stub; the card shows what we know.
+function addPortalStubs(done) {
+  var cycle = null, acc = [];
+  function page(off) {
+    careerSupa.from('transfer_portal')
+      .select('id,unified_id,portal_first,portal_last,source_school,source_conf,division,entered_date,from_team_id,match_conf,status,withdrawn,season')
+      .eq('status', 'active').eq('withdrawn', false).range(off, off + 999)
+      .then(function(r) {
+        if (r.error) { console.warn('portal stubs', r.error.message); done(); return; }
+        acc = acc.concat(r.data || []);
+        if ((r.data || []).length === 1000) { page(off + 1000); return; }
+        var cyc = acc.map(function(x) { return x.season; }).filter(function(s) { return /^\d{4}-\d{2}$/.test(s || ''); }).sort().pop();
+        var shown = {}; var pool = {};
+        allPlayers.forEach(function(p) { if (p.season === CURRENT_SEASON) pool[p.unified_id] = true; });
+        var tc = function(s) { return (s || '').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); }); };
+        acc.forEach(function(x) {
+          if (x.season !== cyc) return;
+          if (x.unified_id && pool[x.unified_id]) return;
+          var key = x.unified_id || ('PORTAL-' + x.id);
+          if (shown[key]) return; shown[key] = true;
+          allPlayers.push({ unified_id: key, _stub: true, _portal: x, season: CURRENT_SEASON, team_id: x.from_team_id,
+            _name: tc(x.portal_first + ' ' + x.portal_last), transfer_history: 'active', primary_pos: null,
+            composite_adj: null, rating_basis: null, minutes: null });
+          pool[key] = true;
+        });
+        activePool = pool;
+        done();
+      });
+  }
+  page(0);
+}
+function stubCard(p) {
+  var x = p._portal || {}, t = teamsById[p.team_id] || {};
+  var why = x.match_conf === 'ambiguous' ? 'Two or more players at her school share this surname, so she could not be matched safely.'
+          : x.match_conf === 'unlinked' ? 'She is not in our stats data (often a freshman or a player with no tracked minutes).'
+          : 'She has no rated season on file yet.';
+  return '<div class="card"><h2>' + p._name + '</h2>' +
+    '<div class="sub">' + (t.short_name || x.source_school || '') + (x.source_conf ? ' · ' + x.source_conf : '') +
+    (x.division ? ' · Div ' + x.division : '') + '</div>' +
+    '<div class="pt-block"><div class="pt-head">In the transfer portal' +
+    '<span class="pt-role" style="color:#065f46;background:#d1fae5">Active</span></div>' +
+    '<div class="pt-body">Entered ' + (x.entered_date || '—') + '. ' + why + ' No rating or stats to show.</div></div>' +
+    emailBlock(p.unified_id) + '</div>';
+}
 var activePool = {};   // unified_id -> true if the player has a CURRENT_SEASON row
 
 function populateSeasonFilter() {
@@ -1283,7 +1330,8 @@ function renderPlayers() {
       c.t + (on ? '<span class="arrow">' + (sortDir < 0 ? '▼' : '▲') + '</span>' : '') + '</th>';
   }).join('') + '</tr>';
 
-  var MAX = 400;   // cap DOM size; filters/sort narrow the list rather than paging
+  // The 400 cap silently hid most of the portal (1,300+ entries) — Nov 25, 2026. A focused filter lifts it.
+  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value) ? 5000 : 400;
   var body = rows.slice(0, MAX).map(function(p) {
     var t = teamsById[p.team_id] || {};
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';
@@ -1615,6 +1663,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
     return r.season === season && (teamId == null || r.team_id === teamId);
   })[0] || rowsForPlayer[rowsForPlayer.length - 1];
   if (!p) { body.innerHTML = '<div class="loading-note">Player not found.</div>'; return; }
+  if (p._stub) { body.innerHTML = stubCard(p); return; }
 
   // Box-score season row for a Wyscout row (same season + team). Wyscout is conference matches only, so where a
   // box-score row exists its GP / Min / G / A replace the Wyscout numbers; ratings stay Wyscout-based.

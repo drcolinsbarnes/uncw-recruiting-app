@@ -215,6 +215,7 @@ body {
 .xfer-tag { font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 20px;
   margin-left: 5px; letter-spacing: .3px; vertical-align: 1px; }
 .xfer-active { background: #d1fae5; color: #065f46; }
+.xfer-mail { background: #dbeafe; color: #1d4ed8; }
 .xfer-prev { background: #ede9fe; color: #5b21b6; }
 .pos-tag { display: inline-block; background: var(--navy); color: #fff; font-size: 9px;
   font-weight: 700; padding: 1px 5px; border-radius: 20px; margin-right: 4px; }
@@ -327,7 +328,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.3 · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.4 · emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -373,6 +374,12 @@ body {
             <option value="active">In the portal now</option>
             <option value="transferred">Has transferred before</option>
             <option value="never">Never transferred</option>
+          </select>
+          <select id="fEmail" onchange="renderPlayers()">
+            <option value="">Any email interest</option>
+            <option value="any">Emailed UNCW</option>
+            <option value="2">Emailed 2+ times</option>
+            <option value="recent">Emailed in last 14 days</option>
           </select>
           <select id="fRpi" onchange="renderPlayers()">
             <option value="">Any team RPI</option>
@@ -716,6 +723,43 @@ var youthLinks = null;   // unified_id -> [youth record + honours], from youth_l
 fetch('youth_links.json', { cache: 'no-cache' }).then(function(r) { return r.ok ? r.json() : {}; })
   .then(function(d) { youthLinks = d || {}; }, function() { youthLinks = {}; });
 
+// ── Players who emailed UNCW about transferring (Career DB, transfer_email_interest) ──
+// Level: 'Emailed' = one email; 'Repeat' = two or more. recent = last 14 days.
+var emailInterest = {};
+function loadEmailInterest(offset, acc) {
+  offset = offset || 0; acc = acc || [];
+  careerSupa.from('transfer_email_interest').select('unified_id,subject,received,sender_email')
+    .order('received', { ascending: false }).range(offset, offset + 999)
+    .then(function(r) {
+      if (r.error) { console.warn('email interest', r.error.message); return; }
+      acc = acc.concat(r.data || []);
+      if ((r.data || []).length === 1000) { loadEmailInterest(offset + 1000, acc); return; }
+      var m = {}, cut = Date.now() - 14 * 864e5;
+      acc.forEach(function(x) {
+        var e = m[x.unified_id] || (m[x.unified_id] = { n: 0, last: null, subject: '', email: x.sender_email });
+        e.n++;
+        var t = x.received ? new Date(x.received).getTime() : 0;
+        if (!e.last || t > e.last) { e.last = t; e.subject = x.subject || ''; }
+      });
+      Object.keys(m).forEach(function(k) { m[k].level = m[k].n >= 2 ? 'Repeat' : 'Emailed'; m[k].recent = m[k].last >= cut; });
+      emailInterest = m;
+      renderPlayers();
+    });
+}
+function emailTitle(e) {
+  return 'Emailed UNCW ' + e.n + (e.n === 1 ? ' time' : ' times') + ', last ' + new Date(e.last).toLocaleDateString();
+}
+function emailBlock(uid) {
+  var e = emailInterest[uid];
+  if (!e) return '';
+  return '<div class="pt-block"><div class="pt-head">Emailed UNCW' +
+    '<span class="pt-role" style="color:#1d4ed8;background:#dbeafe">' + e.level + '</span>' +
+    (e.recent ? '<span class="pt-conf">last 14 days</span>' : '') + '</div>' +
+    '<div class="pt-body">' + e.n + (e.n === 1 ? ' email' : ' emails') + ' · most recent ' +
+    new Date(e.last).toLocaleDateString() + (e.subject ? '<br><i>' + e.subject.replace(/</g, '&lt;') + '</i>' : '') +
+    '<br><span style="color:#6b7280">Self-reported interest; not scouted.</span></div></div>';
+}
+
 function loadInterest() {
   if (!UNCW_SCHOOL_ID) return;
   recruitSupa.from('transfer_interest').select('*').eq('school_id', UNCW_SCHOOL_ID)
@@ -873,6 +917,7 @@ function attachNames() {
       renderPlayers();
       loadTeamRatings();
       loadInterest();
+      loadEmailInterest();
       return;
     }
     careerSupa.from('unified_players').select('unified_id,first,last')
@@ -1124,6 +1169,7 @@ function clearFilters() {
   document.getElementById('fMin').value    = '450';
   document.getElementById('fRpi').value    = '';
   document.getElementById('fXfer').value   = '';
+  document.getElementById('fEmail').value = '';
   document.getElementById('fTeam').value   = '';
   document.getElementById('fSearch').value = '';
   sortKey = 'composite_adj'; sortDir = -1;
@@ -1138,6 +1184,7 @@ function filteredPlayers() {
   var minMin = parseInt(document.getElementById('fMin').value, 10) || 0;
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
   var xfer   = document.getElementById('fXfer').value;
+  var emailF = document.getElementById('fEmail').value;
   var teamF  = document.getElementById('fTeam').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
@@ -1155,6 +1202,12 @@ function filteredPlayers() {
     if (minMin && !q && (p.minutes || 0) < minMin) return false;   // a name/school search always finds her, whatever her minutes
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
     if (xfer && p.transfer_history !== xfer) return false;
+    if (emailF) {
+      var ei = emailInterest[p.unified_id];
+      if (!ei) return false;
+      if (emailF === '2' && ei.n < 2) return false;
+      if (emailF === 'recent' && !ei.recent) return false;
+    }
     if (teamF && String(p.team_id) !== teamF) return false;
     if (q) {
       var hay = (p._name + ' ' + ((t && t.name) || '')).toLowerCase();
@@ -1246,6 +1299,8 @@ function renderPlayers() {
         var cf  = t.conference_short || '';
         return '<td class="col-name">' +
           '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
+          (emailInterest[p.unified_id]
+             ? '<span class="xfer-tag xfer-mail" title="' + emailTitle(emailInterest[p.unified_id]) + '">✉ ' + emailInterest[p.unified_id].level + '</span>' : '') +
           (p.transfer_history === 'active'
              ? '<span class="xfer-tag xfer-active" title="In the transfer portal now">PORTAL</span>' : '') +
           (p.transfer_history === 'transferred'
@@ -1631,6 +1686,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div></div>' +
     overallExplainer(p, pos, t) +
     profileBlocks(p) +
+    emailBlock(p.unified_id) +
     interestBlock(p.unified_id) +
     '</div>';
 

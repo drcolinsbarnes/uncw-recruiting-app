@@ -462,7 +462,7 @@ body.desk .kbd-hint { display: inline; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.3</div>
+        <div class="sub">Women's Soccer · v3.4</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -486,10 +486,12 @@ body.desk .kbd-hint { display: inline; }
             <option value="WF">WF</option><option value="CF">CF</option><option value="N/A">N/A (unknown)</option>
           </select>
           <select id="fMin" onchange="renderPlayers()">
-            <option value="0" selected>Any minutes</option>
-            <option value="450">450+ min (rated)</option>
-            <option value="900">900+ min</option>
-            <option value="1200">1200+ min</option>
+            <option value="any" selected>Any minutes</option>
+            <option value="0-0">0 min</option>
+            <option value="1-299">1–299 min</option>
+            <option value="300-799">300–799 min</option>
+            <option value="800-">800+ min</option>
+            <option value="450-">450+ min</option>
           </select>
         </div>
         <div class="filter-row">
@@ -1737,7 +1739,7 @@ function clearFilters() {
   document.getElementById('fPos').value    = '';
   document.getElementById('fConf').value   = '';
   document.getElementById('fTier').value   = '';
-  document.getElementById('fMin').value    = '0';
+  document.getElementById('fMin').value    = 'any';
   document.getElementById('fRpi').value    = '';
   document.getElementById('fXfer').value   = 'active';
   document.getElementById('fEmail').value = '';
@@ -1754,7 +1756,8 @@ function filteredPlayers() {
   var pos    = document.getElementById('fPos').value;
   var conf   = document.getElementById('fConf').value;
   var tier   = document.getElementById('fTier').value;
-  var minMin = parseInt(document.getElementById('fMin').value, 10) || 0;
+  var minSel = document.getElementById('fMin').value, minLo = null, minHi = null;
+  if (minSel && minSel !== 'any') { var _mp = minSel.split('-'); minLo = parseInt(_mp[0], 10); minHi = _mp[1] === '' ? null : parseInt(_mp[1], 10); }
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
   var xfer   = document.getElementById('fXfer').value;
   var emailF = document.getElementById('fEmail').value;
@@ -1774,7 +1777,7 @@ function filteredPlayers() {
     if (conf && (!t || t.conference !== conf)) return false;
     if (tier && (!t || t.tier !== tier)) return false;
     if (!ratingPasses(p)) return false;
-    if (minMin && !q && (p.minutes || 0) < minMin) return false;   // a name/school search always finds her, whatever her minutes
+    if (minLo !== null && !q) { var _m = p.minutes || 0; if (_m < minLo || (minHi !== null && _m > minHi)) return false; }   // a name/school search always finds her, whatever her minutes
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
     if (xfer && p.transfer_history !== xfer) return false;
     if (awardF) {

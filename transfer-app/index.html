@@ -526,7 +526,7 @@ body.desk .ss-mt { font-size:11px; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.0</div>
+        <div class="sub">Women's Soccer · v4.2</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2413,14 +2413,13 @@ function renderPlayers() {
       { k: 'tier',            t: 'Tier',    cls: 'txt opt' },
       { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
       { k: 'ss_role',         t: 'At UNCW', cls: 'txt' },
-      { k: 'proj_p4',         t: 'At P4',  cls: 'opt' },
       { k: 'matches_played',  t: 'GP'     },
       { k: 'matches_started', t: 'GS',     cls: 'opt' },
       { k: 'minutes',         t: 'Min'    },
       { k: 'goals',           t: 'G'      },
       { k: 'assists',         t: 'A'      }
     ];
-    if (!pos) cols.push({ k: 'player_type_tag', t: 'Type', cls: 'txt type opt' });
+    // 'Type' column removed (Nov 26): player types exist only for FA2025 Wyscout rows, so it was empty for the current season
   }
   if (pos) {
     badgeColsFor(pos).forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });

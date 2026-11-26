@@ -48,6 +48,12 @@ body {
 .fgroup { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; margin: 2px 0 3px; }
 .fgroup ~ .fgroup { margin-top: 6px; }
 /* Rating band multi-select (Nov 26, 2026) */
+.mdrop .rdrop-panel { max-height: 320px; overflow-y: auto; }
+.rdrop-panel input[type=checkbox] { flex: none !important; width: auto; padding: 0 !important; margin: 0; }
+.pp-fgroup .mdrop { flex: 0 0 auto; min-width: 150px; }
+.pp-fgroup .mdrop input[type=checkbox] { flex: none; min-width: 0; width: auto; padding: 0; margin: 0; }
+.pp-fgroup .mdrop label { font-size: 12px; }
+.pp-fgroup .mdrop > button { padding: 6px 8px; font-size: 12px; border: 1px solid var(--border); }
 .rdrop { flex: 1; position: relative; }
 .rdrop > button { width: 100%; padding: 7px 8px; font-size: 12px; text-align: left; background: #fff;
   border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -468,6 +474,7 @@ body.desk .kbd-hint { display: inline; }
 .pp-top span { font-size:10px; color:var(--muted); }
 .pp-axes select, .pp-fgroup select { width:auto; flex:0 0 auto; max-width:260px; }
 /* Portal analysis → Sweet spot (Nov 26, 2026) */
+.role-pill { font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; white-space:nowrap; }
 .fit-tag { font-size:9px; font-weight:800; padding:1px 6px; border-radius:20px; margin-left:4px; border:1px solid; white-space:nowrap; vertical-align:1px; }
 .fit-tag.fit-big { font-size:11px; padding:2px 8px; margin-left:6px; }
 .ss-head { font-size:12px; color:var(--muted); margin:2px 0 8px; }
@@ -519,7 +526,7 @@ body.desk .ss-mt { font-size:11px; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.8</div>
+        <div class="sub">Women's Soccer · v4.0</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -562,16 +569,7 @@ body.desk .ss-mt { font-size:11px; }
             <option value="transferred">Has transferred before</option>
             <option value="never">Never transferred</option>
           </select>
-          <select id="fFit" onchange="renderPlayers()" title="Sweet spot fit for the team the app is set up for (Portal analysis → Sweet spot)">
-            <option value="">Any fit</option>
-            <option value="sweet">Sweet spot</option>
-            <option value="sweetsel">Sweet spot + selective</option>
-            <option value="sel">Selective</option>
-            <option value="upside">Upside bets</option>
-            <option value="reach">Reach</option>
-            <option value="come">Would come, rarely good enough</option>
-            <option value="no">Not a fit</option>
-          </select>
+          <div class="rdrop mdrop" id="md_fit"><button type="button" id="md_fit_btn" onclick="mdToggle(event,'fit')">Any fit ▾</button><div class="rdrop-panel" id="md_fit_panel" style="width:230px" onclick="event.stopPropagation()"></div></div>
         </div>
         <div class="filter-row">
           <select id="fEmail" onchange="renderPlayers()">
@@ -591,14 +589,8 @@ body.desk .ss-mt { font-size:11px; }
         </div>
         <div class="fgroup">Team</div>
         <div class="filter-row">
-          <select id="fConf" onchange="renderPlayers()"><option value="">All Conferences</option></select>
-          <select id="fTier" onchange="renderPlayers()">
-            <option value="">All Tiers</option>
-            <option value="P4">P4</option>
-            <option value="High Major">High Major</option>
-            <option value="Mid Major">Mid Major</option>
-            <option value="Low Major">Low Major</option>
-          </select>
+          <div class="rdrop mdrop" id="md_conf"><button type="button" id="md_conf_btn" onclick="mdToggle(event,'conf')">All conferences ▾</button><div class="rdrop-panel" id="md_conf_panel" style="width:230px" onclick="event.stopPropagation()"></div></div>
+          <div class="rdrop mdrop" id="md_tier"><button type="button" id="md_tier_btn" onclick="mdToggle(event,'tier')">All tiers ▾</button><div class="rdrop-panel" id="md_tier_panel" onclick="event.stopPropagation()"></div></div>
         </div>
         <div class="filter-row">
           <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
@@ -1236,7 +1228,7 @@ function attachNames() {
       addPortalStubs(function() {
       populateTeamFilter();
       renderPlayers();
-      ssZones = null; ssLoad();
+      ssZones = null; ssRefsCache = null; ssCurCache = null; ssLoad();
       loadTeamRatings();
       loadInterest();
       loadEmailInterest();
@@ -1748,7 +1740,7 @@ function ssHomeBar() {
 }
 function ssCells() {
   if (ssZones) return ssZones;
-  var market = ssMarket(), bar = ssHomeBar(), pool = paPool(), cells = {};
+  var market = ssMarket(), pool = paPool(), cells = {};
   SS_TIERS.forEach(function(t) { SS_BUCKETS.forEach(function(b) { cells[t + '|' + b] = { tier: t, b: b, n: 0, fol: 0, mk: 0, reg: 0, pool: 0, projN: 0, good: 0 }; }); });
   (ssMoves || []).forEach(function(m) {
     if (m.source === 'roster' || m.from_minutes == null) return;
@@ -1762,7 +1754,7 @@ function ssCells() {
     var t = paTier(p); if (SS_TIERS.indexOf(t) < 0) return;
     var c = cells[t + '|' + (p._stub ? '0' : ssBucket(p.minutes || 0))]; if (!c) return;
     c.pool++;
-    if (p.proj_uncw != null) { c.projN++; if (p.proj_uncw >= bar) c.good++; }
+    var _r = ssRole(p); if (_r && _r.k !== 'unproven') { c.projN++; if (_r.k === 'best' || _r.k === 'start') c.good++; }
   });
   Object.keys(cells).forEach(function(k) {
     var c = cells[k];
@@ -1771,12 +1763,12 @@ function ssCells() {
     var z;
     if (c.fol < 20 || c.I == null) z = 'unk';
     else if (c.I < 0.2) z = (c.K || 0) >= 0.5 ? 'reach' : 'no';
-    else if (c.G != null) z = c.G < 0.02 ? ((c.K || 0) >= 0.5 ? 'come' : 'no') : (c.G >= 0.25 && c.K >= 0.6) ? 'sweet' : c.K >= 0.5 ? 'sel' : 'no';
+    else if (c.G != null) z = c.G < 0.05 ? ((c.K || 0) >= 0.5 ? 'come' : 'no') : (c.G >= 0.25 && c.K >= 0.6) ? 'sweet' : c.K >= 0.5 ? 'sel' : 'no';
     else if (c.b === '300–799' || c.b === '800+') z = (c.K || 0) >= 0.55 ? 'sel' : (c.K || 0) >= 0.4 ? 'come' : 'no';   // too few projections to judge 'good enough now'
     else z = (c.K || 0) >= ((c.tier === 'P4' || c.tier === 'High Major') ? 0.45 : 0.5) ? 'upside' : 'no';
     c.zone = z;
   });
-  ssZones = cells; ssZones._bar = bar;
+  ssZones = cells;
   return cells;
 }
 function ssZoneOf(p) {
@@ -1800,13 +1792,84 @@ function ssFitOf(uid) {
 var SS_SHORT = { sweet: 'Sweet spot', sel: 'Selective', upside: 'Upside', reach: 'Reach', come: 'Would come', no: 'Not a fit' };
 function ssFitTag(p, big) {
   // shown on portal players (and on anyone once the Fit filter is in use); 'too few to tell' shows nothing
-  if (!big && p.transfer_history !== 'active' && !document.getElementById('fFit').value) return '';
+  if (!big && p.transfer_history !== 'active' && !mdOn('fit')) return '';
   var z = ssFitOf(p.unified_id); if (!z || z === 'unk') return '';
   var Z = SS_Z[z];
   return '<span class="fit-tag' + (big ? ' fit-big' : '') + '" style="background:' + Z.bg + ';color:' + Z.fg + ';border-color:' + Z.ac + '" title="' +
     Z.l + ' for ' + (ssHome().short_name || 'your team') + ': ' + paTier(p) + ', ' + (p._stub ? 0 : Math.round(p.minutes || 0)) + ' min this season (Portal analysis → Sweet spot)">' + SS_SHORT[z] + '</span>';
 }
-function ssOpenCell(tier, b) { paF.tier = tier; paF.bucket = SS_PA_BUCKET[b]; paF.award = ''; paP.posG = ''; paP.conf = ''; paQ = ''; paView = 'players'; paRender(); }
+
+// ── "At <home team>" role read (Nov 26, 2026, Colin) — replaces the projected rating at UNCW ──
+// A player keeps the rating she earned with a full complement of minutes at her level (the card rating already leans on
+// her last full season when this one is short: blend_low_minutes.py). Measured on real transfers 2022-26: proven players
+// (800+ min) who moved down one tier kept their number (median +2.0); 300-799 min players lost about 4 per tier down.
+//   proven  (800+ min this season, or rated off a full season)  -> her rating as is
+//   partial (300-799 min, rated on her own stats)               -> rating minus 4 per tier she moves down to the home team
+//   unproven (under 300 min or a programme-only estimate)       -> no read; the Sweet spot history for her type instead
+// Compared with the home team's own regulars (800+ min this season): >= its best = one of our best, >= its median = would
+// start, >= its lowest = would play, below = depth.
+var SS_ROLE = {
+  best:     { l: 'One of our best', fg: '#065f46', bg: '#bbf7d0', o: 4 },
+  start:    { l: 'Would start',     fg: '#065f46', bg: '#dcfce7', o: 3 },
+  play:     { l: 'Would play',      fg: '#92400e', bg: '#fef3c7', o: 2 },
+  depth:    { l: 'Depth',           fg: '#475569', bg: '#f1f5f9', o: 1 },
+  unproven: { l: 'Unproven',        fg: '#6b21a8', bg: '#f3e8ff', o: 0 }
+};
+var SS_TR = { 'P4': 4, 'High Major': 3, 'Mid Major': 2, 'Low Major': 1 };
+var ssRefsCache = null, ssCurCache = null;
+function ssCur(uid) {
+  if (!ssCurCache) {
+    ssCurCache = {};
+    allPlayers.forEach(function(p) {
+      if (p.season !== CURRENT_SEASON) return;
+      var o = ssCurCache[p.unified_id];
+      if (!o || (p.minutes || 0) > (o.minutes || 0)) ssCurCache[p.unified_id] = p;
+    });
+  }
+  return ssCurCache[uid] || null;
+}
+function ssRefs() {
+  if (ssRefsCache) return ssRefsCache;
+  var v = allPlayers.filter(function(p) { return p.season === CURRENT_SEASON && p.team_id === HOME_TEAM_ID && (p.minutes || 0) >= 800 && p.composite_adj != null; })
+    .map(function(p) { return p.composite_adj; }).sort(function(a, b) { return a - b; });
+  ssRefsCache = v.length ? { best: v[v.length - 1], med: v[Math.floor(v.length / 2)], low: v[0], n: v.length } : { best: 81, med: 77.5, low: 75.6, n: 0 };
+  return ssRefsCache;
+}
+function ssRole(p) {
+  var c = ssCur(p.unified_id);
+  if (!c || c.team_id === HOME_TEAM_ID) return null;
+  if (c.composite_adj == null) return { k: 'unproven', cur: c };
+  var m = c.minutes || 0, proven = m >= 800 || c.rating_basis === 'blended';
+  var partial = !proven && m >= 300 && c.rating_basis !== 'bench (floor only)';
+  if (!proven && !partial) return { k: 'unproven', cur: c };
+  var down = Math.max(0, (SS_TR[paTier(c)] || 1) - (SS_TR[ssHome().tier] || 2));
+  var adj = c.composite_adj - (partial ? 4 * down : 0), R = ssRefs();
+  return { k: adj >= R.best ? 'best' : adj >= R.med ? 'start' : adj >= R.low ? 'play' : 'depth', adj: adj, cur: c, proven: proven, down: down };
+}
+function ssRolePill(p) {
+  var r = ssRole(p); if (!r) return '—';
+  var Z = SS_ROLE[r.k];
+  return '<span class="role-pill" style="color:' + Z.fg + ';background:' + Z.bg + '">' + Z.l + '</span>';
+}
+function ssRoleBlock(p) {
+  var r = ssRole(p); if (!r) return '';
+  var c = r.cur, t = teamsById[c.team_id] || {}, R = ssRefs(), Z = SS_ROLE[r.k], home = ssHome().short_name || 'your team', body;
+  if (r.k === 'unproven') {
+    var cell = ssMoves ? ssCells()[paTier(c) + '|' + (c._stub ? '0' : ssBucket(c.minutes || 0))] : null;
+    body = 'Only ' + Math.round(c.minutes || 0) + ' minutes this season' + (c.rating_basis === 'bench (floor only)' ? ', so her rating is mostly her programme' : '') +
+      ', not enough to judge her own level.' + (cell && cell.K != null ? ' Of past transfers like her (' + paTier(c) + ', ' + cell.b + ' min) who moved to a ' +
+      ssMarket().map(function(x) { return x.replace(' Major', ''); }).join(' or ') + ' programme, <b>' + Math.round(cell.K * 100) + '%</b> became regulars.' : '');
+  } else {
+    body = 'Rated <b>' + c.composite_adj.toFixed(1) + '</b>' + (c.rating_basis === 'blended' ? ' (anchored on her last full season)' : '') + ' on ' +
+      Math.round(c.minutes || 0) + ' min at ' + (t.short_name || t.name || 'her school') + ' (' + paTier(c) + ').' +
+      (r.proven ? ' A proven player keeps her rating when she moves.' :
+        (r.down ? ' Part-time players lose about 4 per tier moving down, so about <b>' + r.adj.toFixed(1) + '</b> here.' : '')) +
+      ' ' + home + '\'s regulars run ' + R.low.toFixed(1) + '–' + R.best.toFixed(1) + ' (median ' + R.med.toFixed(1) + ').';
+  }
+  return '<div class="pt-block"><div class="pt-head">At ' + home + '<span class="pt-role" style="color:' + Z.fg + ';background:' + Z.bg + '">' + Z.l + '</span></div>' +
+    '<div class="pt-body">' + body + '</div></div>';
+}
+function ssOpenCell(tier, b) { MD.pTier.sel = {}; MD.pTier.sel[tier] = true; MD.pConf.sel = {}; MD.pFit.sel = {}; paF.bucket = SS_PA_BUCKET[b]; paF.award = ''; paP.posG = ''; paQ = ''; paView = 'players'; paRender(); }
 function ssOutcome(m) {
   var b = m.to_best_minutes;
   return b == null ? ['Not on file', '#a8a29e'] : b >= 800 ? ['Became a regular', '#10b981'] : b >= 300 ? ['Part-time', '#d97706'] : ['Played little', '#dc2626'];
@@ -1834,7 +1897,7 @@ function paSweet(pool) {
       h += '<button class="ss-cell" style="background:' + z.bg + ';color:' + z.fg + (c.zone === 'unk' ? ';border:1px dashed #a8a29e' : '') + '" onclick="ssOpenCell(\'' + t + '\',\'' + b + '\')">' +
         '<div class="ss-dots">' + dots + '</div><div class="ss-z">' + z.l + '</div>' +
         meter('Come our way', c.I, z.ac) + meter('Regulars', c.K, z.ac) +
-        '<div class="ss-pool">' + c.pool + ' in portal now' + (c.G != null ? ' · <b>' + c.good + '</b> project as starters' : '') + '</div></button>';
+        '<div class="ss-pool">' + c.pool + ' in portal now' + (c.G != null ? ' · <b>' + c.good + '</b> would start' : '') + '</div></button>';
     });
   });
   h += '</div>';
@@ -1842,7 +1905,7 @@ function paSweet(pool) {
     return '<span><i style="background:' + SS_Z[k].bg + ';border:1px solid ' + SS_Z[k].ac + '"></i>' + SS_Z[k].l + '</span>'; }).join('') + '</div>';
   var tot = 0; Object.keys(cells).forEach(function(k) { if (k.charAt(0) !== '_') tot += cells[k].fol; });
   h += '<div class="pa-note"><b>Come our way</b> = share of past movers of this type who landed at a ' + mins + ' programme. <b>Regulars</b> = share of those who then played 800+ minutes in a season there. ' +
-    '<b>Project as starters</b> = players in today\'s portal whose projected rating at ' + (home.short_name || 'your team') + ' is at least that of its median regular (' + (ssZones._bar || 0).toFixed(1) + '). ' +
+    '<b>Would start</b> = portal players whose rating (proven players as is, part-time players minus 4 per tier moving down) is at least ' + (home.short_name || 'your team') + '\'s median regular (' + ssRefs().med.toFixed(1) + '). ' +
     'Based on ' + tot.toLocaleString() + ' transfers followed from the 2022-23 to 2025-26 portal cycles. Tap a box to see those players on the chart.</div>';
   // home team's own transfers in
   var regs = ins.filter(function(m) { return (m.to_best_minutes || 0) >= 800; }).length;
@@ -1944,6 +2007,59 @@ function paLegend() {
     return '<span><i style="background:' + m[k] + '"></i>' + k + '</span>';
   }).join('');
 }
+
+// ── Multi-select checkbox dropdowns (Colin, Nov 26, 2026): conference, tier and sweet-spot fit, on the Players list
+// (conf / tier / fit) and on the Portal analysis chart (pConf / pTier / pFit). Nothing ticked = any.
+var MD = {
+  conf:  { any: 'All conferences', noun: 'conferences', w: 230, sel: {}, opts: [] },
+  tier:  { any: 'All tiers', noun: 'tiers', sel: {}, opts: [] },
+  fit:   { any: 'Any fit', noun: 'fits', w: 230, sel: {}, opts: [] },
+  pConf: { any: 'Any conference', noun: 'conferences', w: 230, sel: {}, opts: [], chart: 1 },
+  pTier: { any: 'Any level', noun: 'levels', sel: {}, opts: [], chart: 1 },
+  pFit:  { any: 'Any fit', noun: 'fits', w: 230, sel: {}, opts: [], chart: 1 }
+};
+var MD_TIERS = [['P4', 'P4'], ['High Major', 'High Major'], ['Mid Major', 'Mid Major'], ['Low Major', 'Low Major']];
+var MD_FITS = [['sweet', 'Sweet spot'], ['sel', 'Selective'], ['upside', 'Upside bets'], ['reach', 'Reach'], ['come', 'Would come, rarely good enough'], ['no', 'Not a fit']];
+MD.tier.opts = MD_TIERS; MD.pTier.opts = MD_TIERS; MD.fit.opts = MD_FITS; MD.pFit.opts = MD_FITS;
+function mdOn(k) { return Object.keys(MD[k].sel).length > 0; }
+function mdPass(k, v) { return !mdOn(k) || !!MD[k].sel[v]; }
+function mdLabel(k) {
+  var d = MD[k], keys = d.opts.filter(function(o) { return d.sel[o[0]]; }).map(function(o) { return o[1]; });
+  return (!keys.length ? d.any : keys.length === 1 ? keys[0] : keys.length + ' ' + d.noun) + ' ▾';
+}
+function mdPanel(k) {
+  var d = MD[k], none = !mdOn(k);
+  return '<label class="all"><input type="checkbox" ' + (none ? 'checked' : '') + ' onchange="mdAll(\'' + k + '\')"> ' + d.any + '</label>' +
+    d.opts.map(function(o) {
+      return '<label><input type="checkbox" ' + (d.sel[o[0]] ? 'checked' : '') + ' onchange="mdSet(\'' + k + '\',' + JSON.stringify(o[0]).replace(/"/g, '&quot;') + ')"> ' + o[1] + '</label>';
+    }).join('');
+}
+function mdHtml(k) {   // for screens rebuilt as HTML strings (the chart); the open state survives the rebuild
+  var d = MD[k];
+  return '<div class="rdrop mdrop' + (d.open ? ' open' : '') + '" id="md_' + k + '"><button type="button" id="md_' + k + '_btn" onclick="mdToggle(event,\'' + k + '\')">' +
+    mdLabel(k) + '</button><div class="rdrop-panel" id="md_' + k + '_panel" style="' + (d.w ? 'width:' + d.w + 'px;' : '') + '" onclick="event.stopPropagation()">' + mdPanel(k) + '</div></div>';
+}
+function mdBuild(k) {
+  var b = document.getElementById('md_' + k + '_btn'), pnl = document.getElementById('md_' + k + '_panel');
+  if (b) b.textContent = mdLabel(k);
+  if (pnl) pnl.innerHTML = mdPanel(k);
+}
+function mdToggle(e, k) {
+  e.stopPropagation();
+  var open = !MD[k].open;
+  Object.keys(MD).forEach(function(x) { MD[x].open = false; var el = document.getElementById('md_' + x); if (el) el.classList.remove('open'); });
+  var r = document.getElementById('fRatingDrop'); if (r) r.classList.remove('open');
+  MD[k].open = open; mdBuild(k);
+  var el = document.getElementById('md_' + k); if (el) el.classList.toggle('open', open);
+}
+function mdChanged(k) { if (MD[k].chart) paRender(); else { mdBuild(k); renderPlayers(); } }
+function mdSet(k, v) { if (MD[k].sel[v]) delete MD[k].sel[v]; else MD[k].sel[v] = true; mdChanged(k); }
+function mdAll(k) { MD[k].sel = {}; mdChanged(k); }
+function mdClear(k) { MD[k].sel = {}; MD[k].open = false; mdBuild(k); }
+document.addEventListener('click', function() {
+  Object.keys(MD).forEach(function(x) { if (MD[x].open) { MD[x].open = false; var el = document.getElementById('md_' + x); if (el) el.classList.remove('open'); } });
+});
+
 function paSetP(k, v) { paP[k] = (k === 'minMin') ? +v : v; paRender(); }
 function paPreset(i) { var q = PA_PRESETS[i]; paP.x = q[1]; paP.y = q[2]; paP.posG = q[3]; paRender(); }
 function paMetricSel(key, val) {
@@ -1956,7 +2072,7 @@ function paMetricSel(key, val) {
 }
 function paPlayers(pool) {
   paLoadBox(pool);
-  if (paP.color === 'zone' || paP.zone) ssLoad();
+  if (paP.color === 'zone' || mdOn('pFit')) ssLoad();
   var sel = function(fn, opts, val) {
     return '<select onchange="' + fn + '(this.value)">' + opts.map(function(o) {
       return '<option value="' + o[0] + '"' + (String(o[0]) === String(val) ? ' selected' : '') + '>' + o[1] + '</option>';
@@ -1973,11 +2089,11 @@ function paPlayers(pool) {
     sel("paSetP.bind(null,'posG')", Object.keys(PA_POSG).map(function(k) { return [k, PA_POSG[k]]; }), paP.posG) +
     sel("paSetF.bind(null,'bucket')", [['', 'Any minutes']].concat(PA_BUCKETS.filter(function(b) { return b !== 'No stats on file'; }).map(function(t) { return [t, t]; })), paF.bucket) +
     sel("paSetF.bind(null,'award')", [['', 'Any award status'], ['any', 'Has an award'], ['aa', 'All-American'], ['ar', 'All-Region'], ['ac', 'All-Conference'], ['ci', 'Conf. POY, etc.']], paF.award) +
-    sel("paSetP.bind(null,'zone')", [['', 'Any fit'], ['sweet', 'Sweet spot'], ['sweetsel', 'Sweet spot + selective'], ['upside', 'Upside bets'], ['reach', 'Reach']], paP.zone) +
+    mdHtml('pFit') +
     sel("paSetP.bind(null,'minMin')", [[0, 'Per 90: any minutes'], [300, 'Per 90: 300+ min'], [450, 'Per 90: 450+ min'], [800, 'Per 90: 800+ min']], paP.minMin) + '</div>';
   var school = '<div class="pp-fgroup"><span>School</span>' +
-    sel("paSetF.bind(null,'tier')", [['', 'Any level']].concat(PA_TIERS.filter(function(t) { return t !== 'Other'; }).map(function(t) { return [t, t]; })), paF.tier) +
-    sel("paSetP.bind(null,'conf')", [['', 'Any conference']].concat(Object.keys(confs).sort().map(function(c) { return [c, c]; })), paP.conf) +
+    (MD.pConf.opts = Object.keys(confs).sort().map(function(c) { return [c, c]; }), '') +
+    mdHtml('pTier') + mdHtml('pConf') +
     '<input type="text" id="paQ" placeholder="Find a player or school…" value="' + paQ + '" oninput="paQuery(this.value)"></div>';
   var loading = !paBox ? '<div class="pa-note">Loading 2026 box scores for shots, clean sheets and keeper numbers…</div>' : '';
   setTimeout(paDraw, 0);
@@ -1990,13 +2106,13 @@ function paPlotRows() {
   var pool = paPool(), X = PA_M[paP.x], Y = PA_M[paP.y], hidden = { stub: 0, thin: 0 };
   var out = [];
   pool.forEach(function(p) {
-    if (paF.tier && paTier(p) !== paF.tier) return;
+    if (!mdPass('pTier', paTier(p))) return;
     if (paF.bucket && paBucket(p) !== paF.bucket) return;
     if (paF.award) { var a = paAwards(p); if (!a[paF.award]) return; }
-    if (paP.conf && (teamsById[p.team_id] || {}).conference_short !== paP.conf) return;
+    if (!mdPass('pConf', (teamsById[p.team_id] || {}).conference_short)) return;
     var g = paPosG(p);
     if (paP.posG === 'OUT' ? g === 'GK' : paP.posG && g !== paP.posG) return;
-    if (paP.zone && ssMoves) { var _zz = ssZoneOf(p); if (paP.zone === 'sweetsel' ? (_zz !== 'sweet' && _zz !== 'sel') : _zz !== paP.zone) return; }
+    if (mdOn('pFit') && ssMoves && !MD.pFit.sel[ssZoneOf(p)]) return;
     if (p._stub) { hidden.stub++; return; }
     var s = paBox ? paBox[p.unified_id] : null;
     var mins = s ? s.min : (p.minutes || 0), gkm = s ? s.gkmin : 0;
@@ -2119,9 +2235,10 @@ function populateSeasonFilter() {
 
 function populateConferenceFilter() {
   var confs = Array.from(new Set(Object.keys(teamsById).map(function(k) { return teamsById[k].conference; }).filter(Boolean))).sort();
-  var sel = document.getElementById('fConf');
-  sel.innerHTML = '<option value="">All Conferences</option>' +
-    confs.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+  var shortOf = {}; Object.keys(teamsById).forEach(function(k) { var t = teamsById[k]; if (t.conference) shortOf[t.conference] = t.conference_short || t.conference; });
+  MD.conf.opts = confs.map(function(c) { return [c, shortOf[c] || c]; })
+    .sort(function(a, b) { return a[1].localeCompare(b[1]); });
+  mdBuild('conf'); mdBuild('tier'); mdBuild('fit');
 }
 
 // ── Rating band filter (Colin, Nov 26, 2026): tick any combination of bands; nothing ticked = any rating.
@@ -2167,15 +2284,14 @@ function ratingPasses(p) {
 function clearFilters() {
   document.getElementById('fSeason').value = CURRENT_SEASON;
   document.getElementById('fPos').value    = '';
-  document.getElementById('fConf').value   = '';
-  document.getElementById('fTier').value   = '';
+  mdClear('conf'); mdClear('tier');
   document.getElementById('fMin').value    = 'any';
   document.getElementById('fRpi').value    = '';
   document.getElementById('fXfer').value   = 'active';
   document.getElementById('fEmail').value = '';
   document.getElementById('fAward').value = '';
   document.getElementById('fTeam').value   = '';
-  document.getElementById('fFit').value    = '';
+  mdClear('fit');
   document.getElementById('fSearch').value = '';
   ratingSel = {}; buildRatingPanel();
   sortKey = 'composite_adj'; sortDir = -1;
@@ -2185,8 +2301,6 @@ function clearFilters() {
 function filteredPlayers() {
   var season = document.getElementById('fSeason').value;
   var pos    = document.getElementById('fPos').value;
-  var conf   = document.getElementById('fConf').value;
-  var tier   = document.getElementById('fTier').value;
   var minSel = document.getElementById('fMin').value, minLo = null, minHi = null;
   if (minSel && minSel !== 'any') { var _mp = minSel.split('-'); minLo = parseInt(_mp[0], 10); minHi = _mp[1] === '' ? null : parseInt(_mp[1], 10); }
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
@@ -2194,7 +2308,6 @@ function filteredPlayers() {
   var emailF = document.getElementById('fEmail').value;
   var awardF = document.getElementById('fAward').value;
   var teamF  = document.getElementById('fTeam').value;
-  var fitF   = document.getElementById('fFit').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
   return allPlayers.filter(function(p) {
@@ -2206,8 +2319,8 @@ function filteredPlayers() {
     if (!activePool[p.unified_id]) return false;
     if (season && p.season !== season) return false;
     if (pos && (pos === 'N/A' ? !!p.primary_pos : p.primary_pos !== pos)) return false;   // N/A = position unknown (Nov 26, 2026)
-    if (conf && (!t || t.conference !== conf)) return false;
-    if (tier && (!t || t.tier !== tier)) return false;
+    if (mdOn('conf') && (!t || !MD.conf.sel[t.conference])) return false;
+    if (mdOn('tier') && (!t || !MD.tier.sel[t.tier])) return false;
     if (!ratingPasses(p)) return false;
     if (minLo !== null && !q) { var _m = p.minutes || 0; if (_m < minLo || (minHi !== null && _m > minHi)) return false; }   // a name/school search always finds her, whatever her minutes
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
@@ -2224,7 +2337,7 @@ function filteredPlayers() {
       if (emailF === 'recent' && !ei.recent) return false;
     }
     if (teamF && String(p.team_id) !== teamF) return false;
-    if (fitF) { var _fz = ssFitOf(p.unified_id); if (fitF === 'sweetsel' ? (_fz !== 'sweet' && _fz !== 'sel') : _fz !== fitF) return false; }
+    if (mdOn('fit') && !MD.fit.sel[ssFitOf(p.unified_id)]) return false;
     if (q) {
       var hay = (p._name + ' ' + ((t && t.name) || '') + ' ' + ((t && t.short_name) || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -2238,6 +2351,7 @@ function sortValue(p, key) {
   if (key === 'school') return (teamsById[p.team_id] || {}).short_name || (teamsById[p.team_id] || {}).name || '';
   if (key === 'conf')   return (teamsById[p.team_id] || {}).conference_short || (teamsById[p.team_id] || {}).conference || '';
   if (key === 'tier')   return { 'P4': 'a', 'High Major': 'b', 'Mid Major': 'c', 'Low Major': 'd' }[(teamsById[p.team_id] || {}).tier] || 'z';
+  if (key === 'ss_role') { var _r = ssRole(p); return _r ? SS_ROLE[_r.k].o : null; }
   if (key.indexOf('badge:') === 0) {
     var b = p.badge_stats && p.badge_stats[key.slice(6)];
     return b ? b.v : null;
@@ -2298,6 +2412,7 @@ function renderPlayers() {
       { k: 'conf',            t: 'Conf',    cls: 'txt opt' },
       { k: 'tier',            t: 'Tier',    cls: 'txt opt' },
       { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
+      { k: 'ss_role',         t: 'At UNCW', cls: 'txt' },
       { k: 'proj_p4',         t: 'At P4',  cls: 'opt' },
       { k: 'matches_played',  t: 'GP'     },
       { k: 'matches_started', t: 'GS',     cls: 'opt' },
@@ -2318,7 +2433,7 @@ function renderPlayers() {
   }).join('') + '</tr>';
 
   // The 400 cap silently hid most of the portal (1,300+ entries) — Nov 25, 2026. A focused filter lifts it.
-  var MAX = (document.getElementById('fFit').value || document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value || Object.keys(ratingSel).length) ? 5000 : 400;
+  var MAX = (mdOn('fit') || mdOn('conf') || mdOn('tier') || document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value || Object.keys(ratingSel).length) ? 5000 : 400;
   var body = rows.slice(0, MAX).map(function(p) {
     var t = teamsById[p.team_id] || {};
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';
@@ -2355,6 +2470,7 @@ function renderPlayers() {
       if (c.k === 'school') return '<td class="txt">' + (t.short_name || t.name || '—') + '</td>';
       if (c.k === 'conf')   return '<td class="txt opt">' + (t.conference_short || t.conference || '—') + '</td>';
       if (c.k === 'tier')   return '<td class="txt opt">' + (t.tier ? '<span class="tier-tag ' + tierCls + '">' + t.tier + '</span>' : '—') + '</td>';
+      if (c.k === 'ss_role') return '<td class="txt">' + ssRolePill(p) + '</td>';
       if (c.k === 'proj_uncw' || c.k === 'proj_p4') return '<td' + (c.k === 'proj_p4' ? ' class="opt"' : '') + '>' + (p[c.k] == null ? '—' : Math.round(p[c.k])) + '</td>';
       if (c.k === 'player_type_tag') return '<td class="txt type opt" title="' + (p.player_type || '').replace(/"/g, '&quot;') + '">' + (p.player_type_tag || '') + '</td>';
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
@@ -3084,7 +3200,8 @@ function profileBlocks(p) {
       '</div>' +
       '<div class="pt-body">' + p.player_type + '</div></div>';
   }
-  if (p.uncw_role) {
+  h += ssRoleBlock(p);
+  if (false && p.uncw_role) {   // old FA2025 CAA benchmark, replaced by the role read (Nov 26)
     var c = ROLE_STYLE[p.uncw_role] || ['#4b5563', '#f3f4f6'];
     h += '<div class="pt-block">' +
       '<div class="pt-head">UNCW ready' +

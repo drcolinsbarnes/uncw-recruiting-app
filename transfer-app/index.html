@@ -172,8 +172,10 @@ body {
 .ptable { border-collapse: separate; border-spacing: 0; font-size: 11px; width: 100%; table-layout: fixed; }
 /* Player column narrowed; the five stat columns are all exactly equal (Colin,
    Aug 1, 2026). 5 x 14% = 70%, leaving 30% for the player identity. */
-.ptable th.col-name, .ptable td.col-name { width: 34%; }
-.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 11%; }
+.ptable th.col-name, .ptable td.col-name { width: 42%; }
+.ptable th:not(.col-name), .ptable td:not(.col-name) { width: 11.6%; }
+/* Name cell may wrap (name, PORTAL / XFER / email tags, school) but never spill into the Rating column — Nov 25, 2026. */
+.ptable td.col-name { white-space: normal; overflow: hidden; }
 .ptable th, .ptable td { padding: 7px 5px; white-space: nowrap; border-bottom: 1px solid var(--border); text-align: right; }
 .ptable th {
   position: sticky; top: 0; z-index: 3; background: var(--navy); color: #fff;
@@ -328,7 +330,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.4 · emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.5 · all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>

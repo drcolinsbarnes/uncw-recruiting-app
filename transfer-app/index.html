@@ -371,7 +371,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.8.4 · filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.9 · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -392,7 +392,7 @@ body {
             <option value="">All Positions</option>
             <option value="GK">GK</option><option value="CB">CB</option><option value="OB">OB</option>
             <option value="DM">DM</option><option value="CM">CM</option><option value="AM">AM</option>
-            <option value="WF">WF</option><option value="CF">CF</option>
+            <option value="WF">WF</option><option value="CF">CF</option><option value="N/A">N/A (unknown)</option>
           </select>
           <select id="fMin" onchange="renderPlayers()">
             <option value="0" selected>Any minutes</option>
@@ -816,6 +816,54 @@ function loadEmailInterest(offset, acc) {
       renderPlayers();
     });
 }
+// ── Every portal entry per player, all cycles (Nov 26, 2026): NCAA ID on the card + transfer history ──
+var portalInfo = {};
+function loadPortalInfo(offset, acc) {
+  offset = offset || 0; acc = acc || [];
+  careerSupa.from('transfer_portal').select('*').not('unified_id', 'is', null)
+    .order('entered_date', { ascending: true }).range(offset, offset + 999)
+    .then(function(r) {
+      if (r.error) { console.warn('portal info', r.error.message); return; }
+      acc = acc.concat(r.data || []);
+      if ((r.data || []).length === 1000) { loadPortalInfo(offset + 1000, acc); return; }
+      var m = {};
+      acc.forEach(function(x) { (m[x.unified_id] = m[x.unified_id] || []).push(x); });
+      portalInfo = m;
+    });
+}
+function ncaaTag(uid) {
+  var e = portalInfo[uid]; if (!e || !e.length) return '';
+  var id = e[e.length - 1].ncaa_id;
+  return id ? '<span class="fit-note" style="margin-left:6px">NCAA ID ' + id + '</span>' : '';
+}
+function portalBlock(uid) {
+  var e = portalInfo[uid]; if (!e || !e.length) return '';
+  var lbl = { active: 'In the portal', signed: 'Signed elsewhere', withdrawn: 'Withdrew' };
+  var rows = e.slice().reverse().map(function(x) {
+    var to = x.to_team_id && teamsById[x.to_team_id] ? ' → ' + (teamsById[x.to_team_id].short_name || teamsById[x.to_team_id].name) : '';
+    var from = (teamsById[x.from_team_id] || {}).short_name || x.source_school || '—';
+    return '<div>' + x.season + ' · from <b>' + from + '</b>' + to + ' · ' + (lbl[x.status] || x.status || '') +
+      (x.entered_date ? ' · entered ' + x.entered_date : '') + '</div>';
+  }).join('');
+  var youth = e.filter(function(x) { return x.youth_id; }).pop();
+  return '<div class="pt-block"><div class="pt-head">Transfer portal' +
+    (e.length > 1 ? '<span class="pt-role" style="color:#92400e;background:#fef3c7">' + e.length + ' entries</span>' : '') +
+    '<span class="pt-conf">NCAA ID ' + (e[e.length - 1].ncaa_id || '—') + '</span></div>' +
+    '<div class="pt-body">' + rows + '</div></div>' + (youth ? youthBlock(youth) : '');
+}
+// A player whose only record is a 0-minute row created from her portal entry (portal_new_players.py)
+function newPlayerCard(p) {
+  var t = teamsById[p.team_id] || {};
+  return '<div class="player-header">' +
+    '<div class="player-name">' + p._name + '</div>' +
+    '<div class="player-sub">' + (t.short_name || t.name || 'Unknown school') + ' · ' + (t.conference_short || t.conference || '—') + '</div>' +
+    '<div class="player-sub" style="margin-top:5px"><span class="pos-tag">' + (p.primary_pos || 'N/A') + '</span>' +
+      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') +
+      ncaaTag(p.unified_id) + '</div>' +
+    '<div class="pt-block"><div class="pt-head">' + (p.season || '').replace('FA', '') + ' season</div>' +
+      '<div class="pt-body">0 games · 0 starts · 0 minutes · 0 goals · 0 assists. No rating: she has not played, so there is nothing to rate yet.</div></div>' +
+    portalBlock(p.unified_id) + emailBlock(p.unified_id) + interestBlock(p.unified_id) + '</div>';
+}
 function emailTitle(e) {
   return 'Emailed UNCW ' + e.n + (e.n === 1 ? ' time' : ' times') + ', last ' + new Date(e.last).toLocaleDateString();
 }
@@ -989,6 +1037,7 @@ function attachNames() {
       loadTeamRatings();
       loadInterest();
       loadEmailInterest();
+      loadPortalInfo();
       });
       return;
     }
@@ -1057,7 +1106,7 @@ function interestTable(rows, headEl, bodyEl, barEl, extraHead, extraCell, empty)
         '</div></td>' +
       '<td class="col-rating rating">' +
         (x.p.composite_adj == null ? '—' : Math.round(x.p.composite_adj)) + '</td>' +
-      '<td>' + (x.p.primary_pos || '?') + '</td>' + extraCell(x) + '</tr>';
+      '<td>' + (x.p.primary_pos || 'N/A') + '</td>' + extraCell(x) + '</tr>';
   }).join('') || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">' +
       empty + '</td></tr>';
 }
@@ -1244,7 +1293,7 @@ function stubCard(p) {
     (x.division ? ' · Div ' + x.division : '') + '</div>' +
     '<div class="pt-block"><div class="pt-head">In the transfer portal' +
     '<span class="pt-role" style="color:#065f46;background:#d1fae5">Active</span></div>' +
-    '<div class="pt-body">Entered ' + (x.entered_date || '—') + '. ' + why + ' No rating or stats to show.</div></div>' +
+    '<div class="pt-body">' + (x.ncaa_id ? 'NCAA ID ' + x.ncaa_id + '. ' : '') + 'Entered ' + (x.entered_date || '—') + '. ' + why + ' No rating or stats to show.</div></div>' +
     youthBlock(x) + emailBlock(p.unified_id) + '</div>';
 }
 // Youth background for a portal entry linked to the recruiting app (transfer_portal.youth_id, Nov 26, 2026).
@@ -1473,7 +1522,7 @@ function paPlayers(pool) {
       var t = teamsById[p.team_id] || {}, a = paAwards(p);
       var tags = (a.aa ? '<span class="pa-aw">AA</span>' : '') + (a.ar ? '<span class="pa-aw">AR</span>' : '') + (a.ac ? '<span class="pa-aw">AC</span>' : '') + (a.ci ? '<span class="pa-aw">POY</span>' : '');
       return '<tr class="pa-click" onclick="openPlayerDetail(\'' + p.unified_id + '\',\'' + p.season + '\',' + (p.team_id || 'null') + ')"><td><b>' + p._name + '</b>' + tags +
-        '<div class="sub">' + (t.short_name || t.name || '') + (t.tier ? ' · ' + t.tier : '') + '</div></td><td>' + (p.primary_pos || '—') + '</td><td>' +
+        '<div class="sub">' + (t.short_name || t.name || '') + (t.tier ? ' · ' + t.tier : '') + '</div></td><td>' + (p.primary_pos || 'N/A') + '</td><td>' +
         (p.minutes == null ? '—' : Math.round(p.minutes)) + '</td><td><b>' + (p.composite_adj == null ? 'n/a' : Math.round(p.composite_adj)) + '</b></td></tr>';
     }).join('') + '</tbody></table>';
   return ctl + '<div class="pa-note">' + rows.length + ' players' + (rows.length > MAXR ? ' · showing top ' + MAXR + ' by rating' : '') +
@@ -1588,7 +1637,7 @@ function filteredPlayers() {
     // current season never appears.
     if (!activePool[p.unified_id]) return false;
     if (season && p.season !== season) return false;
-    if (pos && p.primary_pos !== pos) return false;
+    if (pos && (pos === 'N/A' ? !!p.primary_pos : p.primary_pos !== pos)) return false;   // N/A = position unknown (Nov 26, 2026)
     if (conf && (!t || t.conference !== conf)) return false;
     if (tier && (!t || t.tier !== tier)) return false;
     if (!ratingPasses(p)) return false;
@@ -1697,7 +1746,7 @@ function renderPlayers() {
         var sch = t.short_name || t.name || '—';
         var cf  = t.conference_short || '';
         return '<td class="col-name">' +
-          '<span class="pos-tag">' + (p.primary_pos || '?') + '</span><b>' + p._name + '</b>' +
+          '<span class="pos-tag">' + (p.primary_pos || 'N/A') + '</span><b>' + p._name + '</b>' +
           (emailInterest[p.unified_id]
              ? '<span class="xfer-tag xfer-mail" title="' + emailTitle(emailInterest[p.unified_id]) + '">✉ ' + emailInterest[p.unified_id].level + '</span>' : '') +
           (p.transfer_history === 'active'
@@ -2014,6 +2063,9 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
   })[0] || rowsForPlayer[rowsForPlayer.length - 1];
   if (!p) { body.innerHTML = '<div class="loading-note">Player not found.</div>'; return; }
   if (p._stub) { body.innerHTML = stubCard(p); return; }
+  if (rowsForPlayer.every(function(r) { return r.rating_basis === 'no minutes'; }) && !(boxCache[unifiedId] || []).length) {
+    body.innerHTML = newPlayerCard(p); return;
+  }
 
   // Box-score season row for a Wyscout row (same season + team). Wyscout is conference matches only, so where a
   // box-score row exists its GP / Min / G / A replace the Wyscout numbers; ratings stay Wyscout-based.
@@ -2069,7 +2121,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       (t.conference_short || t.conference || '—') +
       '</div>' +
     '<div class="player-sub" style="margin-top:5px">' +
-      '<span class="pos-tag">' + (pos || '?') + '</span>' +
+      '<span class="pos-tag">' + (pos || 'N/A') + '</span>' + ncaaTag(p.unified_id) +
       (p.listed_pos_raw ? '<span class="fit-note">Listed: ' + p.listed_pos_raw + '</span>' : '') +
       (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') +
     '</div>' +
@@ -2086,6 +2138,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div></div>' +
     overallExplainer(p, pos, t) +
     profileBlocks(p) +
+    portalBlock(p.unified_id) +
     emailBlock(p.unified_id) +
     interestBlock(p.unified_id) +
     '</div>';

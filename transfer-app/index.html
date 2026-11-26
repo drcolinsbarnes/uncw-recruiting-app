@@ -307,6 +307,30 @@ body {
 .aw-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 20px;
   background: #fef3c7; color: #92400e; letter-spacing: .2px; }
 .aw-aa { background: #ede9fe; color: #5b21b6; }
+.aw-ar { background: #dbeafe; color: #1d4ed8; }   /* All-Region: blue; All-American: purple; All-Conference: amber */
+.hon-aa { color: #5b21b6; font-weight: 700; }
+.hon-ar { color: #1d4ed8; font-weight: 700; }
+/* Injury notice (Nov 26, 2026) */
+.inj-flag { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #fff7ed; border: 1px solid #fdba74;
+  color: #9a3412; font-size: 12px; line-height: 1.45; }
+.inj-flag b { color: #7c2d12; }
+.inj-tag { font-size: 9px; font-weight: 800; color: #c2410c; background: #ffedd5; border-radius: 4px; padding: 0 4px; margin-left: 3px; }
+/* Game log (Nov 26, 2026) */
+.gl-tabs, .gl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.gl-tab, .gl-chip { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border);
+  background: #fff; color: var(--navy); cursor: pointer; }
+.gl-tab.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.gl-chip.on { background: #00a6a0; color: #fff; border-color: #00a6a0; }
+table.gl { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+table.gl th { font-size: 10px; text-transform: uppercase; color: var(--muted); text-align: right; padding: 4px 3px; border-bottom: 1px solid var(--border); }
+table.gl td { text-align: right; padding: 5px 3px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+table.gl th:nth-child(-n+3), table.gl td:nth-child(-n+3) { text-align: left; }
+table.gl td.opp { white-space: normal; }
+table.gl .rpi { font-size: 9.5px; color: var(--muted); margin-left: 3px; }
+table.gl .W { color: #15803d; font-weight: 700; } table.gl .L { color: #b91c1c; font-weight: 700; } table.gl .T { color: #64748b; font-weight: 700; }
+table.gl tr.dnp td { color: #94a3b8; }
+table.gl tr.tot td { font-weight: 800; border-top: 2px solid var(--navy); background: #f8fafc; }
+table.gl a { color: #00a6a0; text-decoration: none; }
 .aw-ind { background: #d1fae5; color: #065f46; }
 .hist tr.tot td { font-weight: 800; border-top: 2px solid var(--navy); background: #f8fafc; }
 .est-mark { font-size: 9px; vertical-align: super; letter-spacing: .3px; }
@@ -371,7 +395,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.9 · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v3.1 · low-minutes seasons lean on the last full season · game log + possible-injury flag on cards, All-Region/All-American colours · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2138,6 +2162,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '</div></div>' +
     overallExplainer(p, pos, t) +
     profileBlocks(p) +
+    injuryBlock(boxRows) +
     portalBlock(p.unified_id) +
     emailBlock(p.unified_id) +
     interestBlock(p.unified_id) +
@@ -2246,7 +2271,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
               : ((LVL[a.award_level] || '') + ' All-Conference');
         } else if (a.award_type === 'all_region') {
           txt = (LVL[a.award_level] || '') + ' All-Region' +
-                (a.region ? ' (' + a.region + ')' : '');
+                (a.region ? ' (' + a.region + ')' : ''); cls = ' aw-ar';
         } else if (a.award_type === 'all_america') {
           txt = (LVL[a.award_level] || '') + ' All-American'; cls = ' aw-aa';
         } else { txt = a.award_type; }
@@ -2306,7 +2331,10 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
     var honCell = function(r) {
       var hs = (awardsByPlayer[r.unified_id || p.unified_id] || []).filter(function(a) { return a.season === r.season; })
         .sort(function(a, b) { return (honRank[a.award_type] != null ? honRank[a.award_type] : 3) - (honRank[b.award_type] != null ? honRank[b.award_type] : 3); });
-      return '<td class="hon">' + (hs.length ? hs.map(function(a) { return (a.award_body ? a.award_body + ' · ' : '') + honShort(a); }).join('<br>') : '') + '</td>';
+      var hc = { all_america: 'hon-aa', all_region: 'hon-ar' };
+      return '<td class="hon">' + (hs.length ? hs.map(function(a) {
+        return '<span class="' + (hc[a.award_type] || '') + '">' + (a.award_body ? a.award_body + ' · ' : '') + honShort(a) + '</span>';
+      }).join('<br>') : '') + '</td>';
     };
     var keyStat = order.length ? order[0] : null;
     var keyLbl  = keyStat && badges[keyStat] ? shortLabel(badges[keyStat].label) : '';
@@ -2319,7 +2347,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
         var rt = teamsById[r.team_id] || {};
         var ks = keyStat && r.badge_stats ? r.badge_stats[keyStat] : null;
         return '<tr' + (r === p ? ' class="cur"' : '') + '>' +
-          '<td>' + seasonYear(r.season) + '</td>' +
+          '<td>' + seasonYear(r.season) + (injuredIn(boxRows, r) ? '<span class="inj-tag" title="' + injuredIn(boxRows, r).replace(/"/g, '&quot;') + '">INJ?</span>' : '') + '</td>' +
           '<td class="school">' + (rt.short_name || rt.name || '—') + '</td>' +
           '<td>' + (rt.conference_short || rt.conference || '—') + '</td>' +
           ratingCell(r) +
@@ -2348,8 +2376,112 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
       '<div class="hist-note">GP / Min / G / A cover every match. Rating is built from minutes, goals and assists, the level played at, that season\'s team and conference strength, and conference honours, so every year is comparable. Hover a rating for its parts.</div>';
   }
 
+  if (boxRows.length) {
+    html += '<div class="section-title">Game log</div><div id="gamelog"><div class="loading-note">Loading games…</div></div>' +
+      '<div class="hist-note">Every match from the official box scores. Opponent RPI is that season\'s. Tap ↗ for the box score.</div>';
+  }
   html += '</div>';
   body.innerHTML = html;
+  if (boxRows.length) loadGameLog(unifiedId, boxRows);
+}
+
+// ── Possible injury (Nov 26, 2026) — flagged by ⚙️ Scripts/availability.py from the game log: a regular starter who
+// stopped appearing (season ended early, a run of 4+ missed games, or a late start). It describes the box scores;
+// it is not a diagnosis, so it always says "possible".
+function injuredIn(boxRows, r) {
+  var b = (boxRows || []).filter(function(x) { return x.season === r.season && x.team_id === r.team_id && x.availability; })[0];
+  return b ? b.availability_note || 'Possible injury' : '';
+}
+function injuryBlock(boxRows) {
+  var f = (boxRows || []).filter(function(x) { return x.availability; })
+    .sort(function(a, b) { return (b.season || '').localeCompare(a.season || ''); });
+  if (!f.length) return '';
+  var latest = (boxRows || []).map(function(x) { return x.season; }).sort().pop();
+  var cur = f[0].season === latest;
+  return '<div class="inj-flag"><b>⚠ Possible injury detected' + (cur ? '' : ' (' + seasonYear(f[0].season) + ')') + '</b> — ' +
+    (f[0].availability_note || '') +
+    (f.length > 1 ? '<br><span style="opacity:.8">Also flagged: ' + f.slice(1).map(function(x) { return seasonYear(x.season); }).join(', ') + '</span>' : '') +
+    '<br><span style="opacity:.75">From the box scores only — a low-minutes season after this usually is not a drop in ability.</span></div>';
+}
+
+// ── Game log (Nov 26, 2026): boxscore_player_games + boxscore_games, loaded per player on open ──
+var gameLogCache = {}, rpiBySeason = null, glState = { season: null, filt: 'all' };
+function loadGameLog(uid, boxRows) {
+  var need = 2, rows = null;
+  var done = function() { if (--need === 0) { gameLogCache[uid] = rows || []; renderGameLog(uid, boxRows, true); } };
+  if (gameLogCache[uid]) { renderGameLog(uid, boxRows, true); return; }
+  careerSupa.from('boxscore_player_games')
+    .select('season,team_id,started,minutes,goals,assists,shots,sog,yc,rc,gk_minutes,saves,goals_against,game_key,' +
+            'boxscore_games(game_date,home,away,home_team_id,away_team_id,home_score,away_score,neutral,source_url)')
+    .eq('unified_id', uid).then(function(r) { rows = (r && r.data) || []; done(); }, function() { rows = []; done(); });
+  if (rpiBySeason) { done(); return; }
+  var acc = [];
+  (function page(off) {
+    careerSupa.from('team_rpi_by_season').select('team_id,season,rpi_rank').range(off, off + 999).then(function(r) {
+      acc = acc.concat((r && r.data) || []);
+      if (((r && r.data) || []).length === 1000) { page(off + 1000); return; }
+      rpiBySeason = {};
+      acc.forEach(function(x) { (rpiBySeason[x.season] = rpiBySeason[x.season] || {})[x.team_id] = x.rpi_rank; });
+      done();
+    }, function() { rpiBySeason = {}; done(); });
+  })(0);
+}
+function glSet(uid, k, v) { glState[k] = v; renderGameLog(uid, null, false); }
+function renderGameLog(uid, boxRows, reset) {
+  var el = document.getElementById('gamelog'); if (!el) return;
+  var all = (gameLogCache[uid] || []).filter(function(g) { return g.boxscore_games; });
+  if (!all.length) { el.innerHTML = '<div class="hist-note">No game-by-game box scores on file.</div>'; return; }
+  var seasons = all.map(function(g) { return g.season; }).filter(function(v, i, a) { return a.indexOf(v) === i; }).sort();
+  if (reset || seasons.indexOf(glState.season) < 0) { glState.season = seasons[seasons.length - 1]; glState.filt = 'all'; }
+  var rpi = (rpiBySeason || {})[glState.season] || {};
+  var games = all.filter(function(g) { return g.season === glState.season; })
+    .sort(function(a, b) { return a.boxscore_games.game_date.localeCompare(b.boxscore_games.game_date); });
+  var mine = games.length ? games[0].team_id : null;
+  var myConf = (teamsById[mine] || {}).conference;
+  var info = function(g) {
+    var x = g.boxscore_games, home = x.home_team_id === g.team_id || (x.home_team_id == null && x.away_team_id !== g.team_id && false);
+    if (x.home_team_id !== g.team_id && x.away_team_id !== g.team_id) home = true;   // unmapped team: fall back to home
+    if (x.home_team_id === g.team_id) home = true; else if (x.away_team_id === g.team_id) home = false;
+    var oppId = home ? x.away_team_id : x.home_team_id, oppName = home ? x.away : x.home;
+    var us = home ? x.home_score : x.away_score, them = home ? x.away_score : x.home_score;
+    return { oppId: oppId, opp: (teamsById[oppId] || {}).short_name || oppName, rk: oppId != null ? rpi[oppId] : null,
+             conf: oppId != null && (teamsById[oppId] || {}).conference === myConf,
+             where: x.neutral ? 'N' : (home ? 'vs' : '@'), us: us, them: them, url: x.source_url, date: x.game_date };
+  };
+  var F = { all: function() { return true; }, t50: function(i) { return i.rk && i.rk <= 50; },
+            t100: function(i) { return i.rk && i.rk <= 100; }, conf: function(i) { return i.conf; } };
+  var shown = games.filter(function(g) { return F[glState.filt](info(g)); });
+  var gk = games.some(function(g) { return g.gk_minutes > 0; });
+  var tot = { gp: 0, gs: 0, min: 0, g: 0, a: 0, sh: 0, sog: 0, sv: 0, ga: 0 };
+  var body = shown.map(function(g) {
+    var i = info(g), m = Math.max(g.minutes || 0, g.gk_minutes || 0);
+    var res = (i.us == null || i.them == null) ? '' : (i.us > i.them ? 'W' : i.us < i.them ? 'L' : 'T');
+    if (m > 0) { tot.gp++; tot.min += m; } if (g.started) tot.gs++;
+    tot.g += g.goals || 0; tot.a += g.assists || 0; tot.sh += g.shots || 0; tot.sog += g.sog || 0;
+    tot.sv += g.saves || 0; tot.ga += g.goals_against || 0;
+    var d = new Date(i.date + 'T12:00:00');
+    return '<tr' + (m > 0 ? '' : ' class="dnp"') + '><td>' + (d.getMonth() + 1) + '/' + d.getDate() + '</td>' +
+      '<td class="opp">' + i.where + ' ' + i.opp + (i.rk ? '<span class="rpi">#' + i.rk + '</span>' : '') + '</td>' +
+      '<td>' + (res ? '<span class="' + res + '">' + res + '</span> ' + i.us + '-' + i.them : '') + '</td>' +
+      '<td>' + (g.started ? '✓' : '') + '</td><td>' + m + '</td><td>' + (g.goals || '') + '</td><td>' + (g.assists || '') + '</td>' +
+      '<td>' + (g.shots || '') + '</td><td>' + (g.sog || '') + '</td>' +
+      (gk ? '<td>' + (g.gk_minutes ? g.saves : '') + '</td><td>' + (g.gk_minutes ? g.goals_against : '') + '</td>' : '') +
+      '<td>' + (i.url ? '<a href="' + i.url + '" target="_blank" rel="noopener">↗</a>' : '') + '</td></tr>';
+  }).join('');
+  var chips = [['all', 'All'], ['conf', 'Conference'], ['t50', 'vs RPI top 50'], ['t100', 'vs RPI top 100']];
+  el.innerHTML =
+    '<div class="gl-tabs">' + seasons.map(function(sn) {
+      return '<span class="gl-tab' + (sn === glState.season ? ' on' : '') + '" onclick="glSet(\'' + uid + '\',\'season\',\'' + sn + '\')">' + seasonYear(sn) + '</span>';
+    }).join('') + '</div>' +
+    '<div class="gl-chips">' + chips.map(function(c) {
+      return '<span class="gl-chip' + (c[0] === glState.filt ? ' on' : '') + '" onclick="glSet(\'' + uid + '\',\'filt\',\'' + c[0] + '\')">' + c[1] + '</span>';
+    }).join('') + '</div>' +
+    '<div class="hist-wrap"><table class="gl"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>GS</th><th>Min</th><th>G</th><th>A</th><th>Sh</th><th>SOG</th>' +
+    (gk ? '<th>Sv</th><th>GA</th>' : '') + '<th></th></tr></thead><tbody>' + (body || '<tr><td colspan="12">No games match this filter.</td></tr>') +
+    (shown.length ? '<tr class="tot"><td colspan="3">' + tot.gp + ' GP of ' + shown.length + '</td><td>' + tot.gs + '</td><td>' + tot.min.toLocaleString() +
+      '</td><td>' + tot.g + '</td><td>' + tot.a + '</td><td>' + tot.sh + '</td><td>' + tot.sog + '</td>' +
+      (gk ? '<td>' + tot.sv + '</td><td>' + tot.ga + '</td>' : '') + '<td></td></tr>' : '') +
+    '</tbody></table></div>';
 }
 
 // ── Player Type + UNCW Ready ───────────────────────────────────────────────
@@ -2408,6 +2540,16 @@ function overallExplainer(p, pos, t) {
   // she has a floor instead. This is the population Colin actually signs from
   // (Leonard 227 min, Thomas 195, Lutz 336, White 495, Longwell 584), so the
   // number has to be shown AND honestly caveated, not hidden.
+  if (p.rating_basis === 'blended') {
+    // Nov 26, 2026 (blend_low_minutes.py): under 450 minutes this season, so the rating leans on her last full season.
+    var bp = (bprCache[p.unified_id] || []).filter(function(r) { return r.season !== p.season && (r.minutes || 0) >= 900; })
+      .sort(function(a, b) { return (b.season || '').localeCompare(a.season || ''); })[0];
+    var m = p.minutes || 0, w = m / (m + 1500);
+    return '<div class="basis-note"><b>Leans on her last full season.</b> She played ' + m + ' minutes this season, too few to ' +
+      'replace a full season' + (bp ? ' (' + seasonYear(bp.season) + ': ' + Math.round(bp.rating) + ', ' + bp.minutes.toLocaleString() + ' min)' : '') +
+      ', so this season counts for ' + Math.round(w * 100) + '% of the number. Tested on 144 players who had a full season, then a ' +
+      'low one, then a full one again: they came back to their earlier level, and the low season alone missed by twice as much.</div>';
+  }
   if (p.rating_basis === 'bench (floor only)') {
     var tn = t && t.tier ? t.tier : 'her level';
     return '<div class="basis-note"><b>Estimate — not earned from stats.</b> ' +

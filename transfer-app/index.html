@@ -43,6 +43,15 @@ body {
 .filter-bar { background: #fff; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .filter-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .filter-row:last-child { margin-bottom: 0; }
+/* Rating band multi-select (Nov 26, 2026) */
+.rdrop { flex: 1; position: relative; }
+.rdrop > button { width: 100%; padding: 7px 8px; font-size: 12px; text-align: left; background: #fff;
+  border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rdrop-panel { display: none; position: absolute; z-index: 50; top: 100%; left: 0; right: 0; min-width: 150px; margin-top: 2px;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 6px 8px; }
+.rdrop.open .rdrop-panel { display: block; }
+.rdrop-panel label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+.rdrop-panel label.all { border-bottom: 1px solid #e5e7eb; margin-bottom: 3px; padding-bottom: 5px; font-weight: 600; }
 .filter-row select, .filter-row input { flex: 1; padding: 7px 8px; font-size: 12px;
   border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .filter-row select:focus, .filter-row input:focus { outline: 2px solid var(--teal); }
@@ -358,7 +367,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.7 · youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.8 · rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -390,6 +399,10 @@ body {
             <option value="Mid Major">Mid Major</option>
             <option value="Low Major">Low Major</option>
           </select>
+          <div class="rdrop" id="fRatingDrop">
+            <button type="button" id="fRatingBtn" onclick="toggleRatingDrop(event)">Any rating ▾</button>
+            <div class="rdrop-panel" id="fRatingPanel" onclick="event.stopPropagation()"></div>
+          </div>
         </div>
         <div class="filter-row">
           <select id="fMin" onchange="renderPlayers()">
@@ -1489,6 +1502,43 @@ function populateConferenceFilter() {
     confs.map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
 }
 
+// ── Rating band filter (Colin, Nov 26, 2026): tick any combination of bands; nothing ticked = any rating.
+// Bands use the ROUNDED rating, i.e. the number the table shows, so a 89.6 shown as 90 sits in 90-95.
+var RATING_BANDS = [
+  ['90', '90–95', 90, 999], ['85', '85–89', 85, 89], ['80', '80–84', 80, 84], ['75', '75–79', 75, 79],
+  ['70', '70–74', 70, 74], ['65', '65–69', 65, 69], ['60', '60–64', 60, 64], ['55', '55–59', 55, 59],
+  ['50', '50–54', 50, 54], ['lt50', 'Below 50', -999, 49], ['none', 'Unrated', null, null]
+];
+var ratingSel = {};
+function buildRatingPanel() {
+  var el = document.getElementById('fRatingPanel'); if (!el) return;
+  var any = !Object.keys(ratingSel).length;
+  el.innerHTML = '<label class="all"><input type="checkbox" ' + (any ? 'checked' : '') + ' onchange="ratingAll()"> All / any</label>' +
+    RATING_BANDS.map(function(b) {
+      return '<label><input type="checkbox" ' + (ratingSel[b[0]] ? 'checked' : '') + ' onchange="ratingToggle(\'' + b[0] + '\')"> ' + b[1] + '</label>';
+    }).join('');
+  var keys = RATING_BANDS.filter(function(b) { return ratingSel[b[0]]; }).map(function(b) { return b[1]; });
+  document.getElementById('fRatingBtn').textContent =
+    (any ? 'Any rating' : keys.length <= 2 ? 'Rating ' + keys.join(', ') : 'Rating: ' + keys.length + ' bands') + ' ▾';
+}
+function toggleRatingDrop(e) {
+  e.stopPropagation();
+  buildRatingPanel();
+  document.getElementById('fRatingDrop').classList.toggle('open');
+}
+document.addEventListener('click', function() { var d = document.getElementById('fRatingDrop'); if (d) d.classList.remove('open'); });
+function ratingAll() { ratingSel = {}; buildRatingPanel(); renderPlayers(); }
+function ratingToggle(k) { if (ratingSel[k]) delete ratingSel[k]; else ratingSel[k] = true; buildRatingPanel(); renderPlayers(); }
+function ratingPasses(p) {
+  if (!Object.keys(ratingSel).length) return true;
+  var v = p.composite_adj == null ? null : Math.round(p.composite_adj);
+  return RATING_BANDS.some(function(b) {
+    if (!ratingSel[b[0]]) return false;
+    if (b[0] === 'none') return v === null;
+    return v !== null && v >= b[2] && v <= b[3];
+  });
+}
+
 // Reset every filter back to its default and re-render (Colin, Aug 1, 2026).
 // Season goes back to the current season, minutes back to the 450 qualifying
 // floor — not to "any", since unrated players aren't a useful default view.
@@ -1504,6 +1554,7 @@ function clearFilters() {
   document.getElementById('fAward').value = '';
   document.getElementById('fTeam').value   = '';
   document.getElementById('fSearch').value = '';
+  ratingSel = {}; buildRatingPanel();
   sortKey = 'composite_adj'; sortDir = -1;
   renderPlayers();
 }
@@ -1532,6 +1583,7 @@ function filteredPlayers() {
     if (pos && p.primary_pos !== pos) return false;
     if (conf && (!t || t.conference !== conf)) return false;
     if (tier && (!t || t.tier !== tier)) return false;
+    if (!ratingPasses(p)) return false;
     if (minMin && !q && (p.minutes || 0) < minMin) return false;   // a name/school search always finds her, whatever her minutes
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
     if (xfer && p.transfer_history !== xfer) return false;
@@ -1621,7 +1673,7 @@ function renderPlayers() {
   }).join('') + '</tr>';
 
   // The 400 cap silently hid most of the portal (1,300+ entries) — Nov 25, 2026. A focused filter lifts it.
-  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value) ? 5000 : 400;
+  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value || Object.keys(ratingSel).length) ? 5000 : 400;
   var body = rows.slice(0, MAX).map(function(p) {
     var t = teamsById[p.team_id] || {};
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';

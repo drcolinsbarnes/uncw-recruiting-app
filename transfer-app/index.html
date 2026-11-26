@@ -375,6 +375,73 @@ table.gl a { color: #00a6a0; text-decoration: none; }
 .aw-first  { background: #dcfce7; color: #15803d; }
 .aw-second { background: #e0f2fe; color: #0369a1; }
 .aw-other  { background: var(--border); color: var(--muted); }
+
+/* ══ DESKTOP LAYOUT (Nov 26, 2026) — body.desk is set by script when the window is ≥960px wide.
+   Phone layout above is untouched. Three panes on Players: filter rail · wide table · player card. ══ */
+body.desk #app { max-width: none; }
+body.desk #mainApp.shown { display: grid !important; grid-template-columns: minmax(0, 1fr) 0; grid-template-rows: auto auto auto minmax(0, 1fr); }
+body.desk #mainApp.shown.detail-open { grid-template-columns: minmax(0, 1fr) min(600px, 40vw); }
+body.desk #mainApp.detail-open #screenPlayers.active { grid-template-columns: 224px minmax(0, 1fr); }
+body.desk #mainApp.detail-open #playersTable th, body.desk #mainApp.detail-open #playersTable td { padding-left: 7px; padding-right: 7px; }
+body.desk .app-header { grid-column: 1 / -1; grid-row: 1; padding: 10px 24px; }
+body.desk .app-header h1 { font-size: 17px; letter-spacing: -.2px; }
+body.desk .app-header .sub { font-size: 11px; }
+body.desk #configWarning { grid-column: 1 / -1; grid-row: 3; }
+body.desk .bottom-nav { grid-column: 1 / -1; grid-row: 2; position: static; justify-content: flex-start; gap: 2px;
+  padding: 0 16px; background: #002a5e; box-shadow: inset 0 -1px 0 rgba(255,255,255,.08); }
+body.desk .nav-btn { flex: 0 0 auto; flex-direction: row; gap: 7px; font-size: 13px; padding: 11px 16px 9px;
+  border-bottom: 3px solid transparent; color: rgba(255,255,255,.7); }
+body.desk .nav-btn:hover { color: #fff; }
+body.desk .nav-btn.active { color: #fff; border-bottom-color: var(--gold); }
+body.desk .nav-icon { font-size: 14px; }
+body.desk .screen { grid-column: 1; grid-row: 4; min-height: 0; }
+body.desk #screenPlayerDetail { grid-column: 2; grid-row: 4; border-left: 1px solid var(--border); background: #fff;
+  box-shadow: -8px 0 24px rgba(0, 50, 111, .06); }
+body.desk #screenPlayerDetail .back-btn { font-size: 12px; padding: 6px 12px; }
+/* Players: filter rail + table */
+body.desk #screenPlayers.active { display: grid; grid-template-columns: 272px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+body.desk #screenPlayers .filter-bar { grid-column: 1; grid-row: 1 / span 2; overflow-y: auto; border-bottom: 0;
+  border-right: 1px solid var(--border); padding: 14px 16px 20px; background: #fbfcfd; }
+body.desk #screenPlayers .filter-row { flex-direction: column; gap: 7px; margin-bottom: 7px; }
+body.desk #screenPlayers .filter-row > * { width: 100%; flex: none; }
+body.desk #screenPlayers .filter-row select, body.desk #screenPlayers .filter-row input { padding: 8px 10px; font-size: 13px; }
+body.desk #screenPlayers .rdrop > button { padding: 8px 10px; font-size: 13px; }
+body.desk #screenPlayers .rdrop-panel { width: 100%; max-width: none; }
+body.desk #screenPlayers .fgroup { font-size: 11px; margin: 4px 0 6px; }
+body.desk #screenPlayers .fgroup ~ .fgroup { margin-top: 16px; }
+body.desk #screenPlayers .results-bar { grid-column: 2; grid-row: 1; padding: 9px 20px; font-size: 12px; }
+body.desk #screenPlayers .table-wrap { grid-column: 2; grid-row: 2; overflow: auto; }
+body.desk .ptable { font-size: 13px; table-layout: auto; }
+body.desk .ptable th.col-name, body.desk .ptable td.col-name { width: auto; min-width: 230px; }
+body.desk .ptable th:not(.col-name), body.desk .ptable td:not(.col-name) { width: auto; }
+body.desk .ptable th, body.desk .ptable td { padding: 9px 10px; }
+body.desk .ptable td.col-name b { font-size: 14px; }
+body.desk #playersTable td.col-name .sub { display: none; }        /* school + conference have their own columns here */
+body.desk #playersTable th.txt, body.desk #playersTable td.txt { text-align: left; }
+body.desk #playersTable td.txt { color: #334155; }
+body.desk #playersTable td.type { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+body.desk #playersTable tbody tr.sel td { background: #d7f1ef !important; }
+body.desk #mainApp.detail-open #playersTable .opt { display: none; }   /* card open: keep the columns that matter on screen */
+body.desk #screenPlayers .rdrop > button { border: 1px solid var(--border); border-radius: 8px; }
+@media (max-width: 1299px) {   /* laptop / framed in the Matrix: with a card open, the list gets the rail's space */
+  body.desk #mainApp.detail-open #screenPlayers.active { grid-template-columns: 0 minmax(0, 1fr); }
+  body.desk #mainApp.detail-open #screenPlayers .filter-bar { display: none; }
+  body.desk .kbd-hint { display: none !important; }
+}
+body.desk #playersTable tbody tr.sel td.col-name { box-shadow: inset 4px 0 0 var(--teal); }
+/* other tabs: use the width, but keep tables readable */
+body.desk #screenShortlist .ptable-wrap, body.desk #screenVisits .ptable-wrap,
+body.desk #screenRankings .ptable-wrap { overflow: auto; }
+body.desk #screenRankings .filter-bar, body.desk #screenRankings .results-bar,
+body.desk #screenShortlist .results-bar, body.desk #screenVisits .results-bar { padding-left: 24px; padding-right: 24px; }
+body.desk #screenRankings .filter-row { max-width: 720px; }
+body.desk #teamList { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-content: start; padding: 16px 24px; }
+body.desk #teamList > * { margin-bottom: 0; }
+body.desk #paBody { padding: 18px 24px 28px !important; }
+body.desk #paBody > * { max-width: 1280px; }
+body.desk .pa-tabs { padding-left: 24px; }
+body.desk .kbd-hint { display: inline; }
+.kbd-hint { display: none; color: var(--muted); font-size: 11px; margin-left: 10px; }
 </style>
 </head>
 <body>
@@ -395,7 +462,7 @@ table.gl a { color: #00a6a0; text-decoration: none; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.2 · low-minutes seasons lean on the last full season (+ team-improvement credit) · game log + possible-injury flag on cards, All-Region/All-American colours · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v3.3</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -494,7 +561,7 @@ table.gl a { color: #00a6a0; text-decoration: none; }
 
     <!-- ══ Player detail (shown over the Players list) ══ -->
     <div id="screenPlayerDetail" class="screen">
-      <div style="padding:12px 16px 4px;"><button class="back-btn" onclick="showScreen('Players')">← Back to Players</button></div>
+      <div style="padding:12px 16px 4px;"><button class="back-btn" onclick="closeDetail()" id="detailBack">← Back to Players</button><span class="kbd-hint">↑ ↓ next player · Esc closes</span></div>
       <div id="playerDetailBody" style="flex:1; overflow-y:auto;"></div>
     </div>
 
@@ -724,6 +791,7 @@ recruitSupa.auth.onAuthStateChange(function(event, session) {
   if (session) {
     document.getElementById('screenLogin').style.display = 'none';
     document.getElementById('mainApp').style.display = 'flex';
+    document.getElementById('mainApp').classList.add('shown');
     if (!_booted) { _booted = true; boot(); }
   } else {
     _booted = false;
@@ -738,7 +806,48 @@ function switchToRecruitingApp() {
 
 // ── Nav ──────────────────────────────────────────────────────────────────
 var SCREENS = ['Players','PlayerDetail','Shortlist','Visits','Team','Insights','Rankings','Portal'];
+// ── Desktop (Nov 26, 2026): ≥960px wide gets the three-pane layout; the card opens beside the list ──
+var DESK = window.matchMedia('(min-width: 960px)');
+function isDesk() { return DESK.matches; }
+function applyDesk() {
+  document.body.classList.toggle('desk', isDesk());
+  var b = document.getElementById('detailBack'); if (b) b.textContent = isDesk() ? '✕ Close' : '← Back to Players';
+  if (!isDesk()) document.getElementById('mainApp').classList.remove('detail-open');
+  if (typeof allPlayers !== 'undefined' && allPlayers.length) renderPlayers();
+}
+(DESK.addEventListener ? DESK.addEventListener('change', applyDesk) : DESK.addListener(applyDesk));
+document.addEventListener('DOMContentLoaded', applyDesk);
+function closeDetail() {
+  if (!isDesk()) { showScreen('Players'); return; }
+  document.getElementById('mainApp').classList.remove('detail-open');
+  document.getElementById('screenPlayerDetail').classList.remove('active');
+  markSelected(null);
+}
+var selectedUid = null;
+function markSelected(uid) {
+  selectedUid = uid;
+  var rows = document.querySelectorAll('#playersBody tr[data-uid]');
+  for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('sel', rows[i].getAttribute('data-uid') === uid);
+}
+document.addEventListener('keydown', function(e) {
+  if (!isDesk() || !document.getElementById('mainApp').classList.contains('detail-open')) return;
+  var tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (e.key === 'Escape') { closeDetail(); return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  if (!document.getElementById('screenPlayers').classList.contains('active')) return;
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#playersBody tr[data-uid]'));
+  var i = rows.findIndex(function(r) { return r.classList.contains('sel'); });
+  var nx = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+  if (nx) { e.preventDefault(); nx.click(); nx.scrollIntoView({ block: 'nearest' }); }
+});
 function showScreen(name) {
+  if (isDesk() && name === 'PlayerDetail') {
+    document.getElementById('screenPlayerDetail').classList.add('active');
+    document.getElementById('mainApp').classList.add('detail-open');
+    return;
+  }
+  if (isDesk()) { document.getElementById('mainApp').classList.remove('detail-open'); }
   SCREENS.forEach(function(s) {
     var el = document.getElementById('screen' + s);
     if (el) el.classList.toggle('active', s === name);
@@ -1690,7 +1799,9 @@ function filteredPlayers() {
 
 function sortValue(p, key) {
   if (key === 'name')   return p._name || '';
-  if (key === 'school') return (teamsById[p.team_id] || {}).name || '';
+  if (key === 'school') return (teamsById[p.team_id] || {}).short_name || (teamsById[p.team_id] || {}).name || '';
+  if (key === 'conf')   return (teamsById[p.team_id] || {}).conference_short || (teamsById[p.team_id] || {}).conference || '';
+  if (key === 'tier')   return { 'P4': 'a', 'High Major': 'b', 'Mid Major': 'c', 'Low Major': 'd' }[(teamsById[p.team_id] || {}).tier] || 'z';
   if (key.indexOf('badge:') === 0) {
     var b = p.badge_stats && p.badge_stats[key.slice(6)];
     return b ? b.v : null;
@@ -1743,6 +1854,24 @@ function renderPlayers() {
     { k: 'goals',           t: 'G'      },
     { k: 'assists',         t: 'A'       }
   ];
+  if (isDesk()) {
+    // Desktop: school, conference and tier get their own columns, plus the UNCW / P4 projections and starts.
+    cols = [
+      { k: 'name',            t: 'Player',  cls: 'col-name' },
+      { k: 'school',          t: 'School',  cls: 'txt' },
+      { k: 'conf',            t: 'Conf',    cls: 'txt opt' },
+      { k: 'tier',            t: 'Tier',    cls: 'txt opt' },
+      { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
+      { k: 'proj_uncw',       t: 'At UNCW' },
+      { k: 'proj_p4',         t: 'At P4',  cls: 'opt' },
+      { k: 'matches_played',  t: 'GP'     },
+      { k: 'matches_started', t: 'GS',     cls: 'opt' },
+      { k: 'minutes',         t: 'Min'    },
+      { k: 'goals',           t: 'G'      },
+      { k: 'assists',         t: 'A'      }
+    ];
+    if (!pos) cols.push({ k: 'player_type_tag', t: 'Type', cls: 'txt type opt' });
+  }
   if (pos) {
     badgeColsFor(pos).forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
   }
@@ -1786,6 +1915,12 @@ function renderPlayers() {
           (est ? ' title="Estimate — limited minutes. Based on her programme and how much she plays, not her stats."' : '') +
           '>' + Math.round(p.composite_adj) + '</td>';
       }
+      if (c.k === 'matches_started') return '<td class="opt">' + (p.matches_started == null ? '—' : p.matches_started) + '</td>';
+      if (c.k === 'school') return '<td class="txt">' + (t.short_name || t.name || '—') + '</td>';
+      if (c.k === 'conf')   return '<td class="txt opt">' + (t.conference_short || t.conference || '—') + '</td>';
+      if (c.k === 'tier')   return '<td class="txt opt">' + (t.tier ? '<span class="tier-tag ' + tierCls + '">' + t.tier + '</span>' : '—') + '</td>';
+      if (c.k === 'proj_uncw' || c.k === 'proj_p4') return '<td' + (c.k === 'proj_p4' ? ' class="opt"' : '') + '>' + (p[c.k] == null ? '—' : Math.round(p[c.k])) + '</td>';
+      if (c.k === 'player_type_tag') return '<td class="txt type opt" title="' + (p.player_type || '').replace(/"/g, '&quot;') + '">' + (p.player_type_tag || '') + '</td>';
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
       if (c.k === 'rank_team') return rankCell(p.rank_team, p.n_team);
@@ -1800,7 +1935,8 @@ function renderPlayers() {
       }
       return '<td>' + (v == null ? '—' : v) + '</td>';
     }).join('');
-    return '<tr onclick="openPlayerDetail(\'' + p.unified_id + '\',\'' + p.season + '\',' + (p.team_id || 'null') + ')">' + cells + '</tr>';
+    return '<tr data-uid="' + p.unified_id + '"' + (p.unified_id === selectedUid ? ' class="sel"' : '') +
+      ' onclick="markSelected(\'' + p.unified_id + '\');openPlayerDetail(\'' + p.unified_id + '\',\'' + p.season + '\',' + (p.team_id || 'null') + ')">' + cells + '</tr>';
   }).join('');
 
   document.getElementById('playersBody').innerHTML = body ||

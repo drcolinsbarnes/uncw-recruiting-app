@@ -467,6 +467,36 @@ body.desk .kbd-hint { display: inline; }
 .pp-top b { font-size:12px; color:var(--navy); }
 .pp-top span { font-size:10px; color:var(--muted); }
 .pp-axes select, .pp-fgroup select { width:auto; flex:0 0 auto; max-width:260px; }
+/* Portal analysis → Sweet spot (Nov 26, 2026) */
+.ss-head { font-size:12px; color:var(--muted); margin:2px 0 8px; }
+.ss-head b { color:var(--navy); }
+.ss-grid { display:grid; grid-template-columns:44px repeat(4, minmax(0,1fr)); gap:5px; }
+.ss-ch { font-size:11px; font-weight:700; color:var(--muted); text-align:center; align-self:end; }
+.ss-rh { font-size:12px; font-weight:800; color:var(--navy); display:flex; align-items:center; }
+.ss-cell { position:relative; border:1px solid transparent; border-radius:9px; padding:7px 7px 6px; text-align:left; cursor:pointer; min-height:112px; font:inherit; }
+.ss-cell:hover { outline:2px solid var(--navy); }
+.ss-z { font-size:11px; font-weight:800; margin-bottom:4px; padding-right:28px; line-height:1.2; }
+.ss-mt { display:grid; grid-template-columns:1fr 34px; grid-template-rows:auto 6px; column-gap:4px; font-size:10px; margin:2px 0; }
+.ss-mt span { grid-column:1; }
+.ss-mt b { grid-column:2; grid-row:1 / span 2; text-align:right; align-self:center; font-size:11px; }
+.ss-tr { grid-column:1; height:5px; border-radius:3px; background:rgba(0,0,0,.08); overflow:hidden; }
+.ss-tr div { height:100%; border-radius:3px; }
+.ss-pool { font-size:10px; margin-top:5px; line-height:1.3; }
+.ss-dots { position:absolute; top:6px; right:6px; display:flex; flex-wrap:wrap; gap:2px; max-width:40px; justify-content:flex-end; }
+.ss-dots i { width:9px; height:9px; border-radius:50%; border:1.5px solid #fff; display:block; }
+.ss-legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:#334155; margin:8px 0 2px; }
+.ss-legend span { display:flex; align-items:center; gap:4px; }
+.ss-legend i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+.ss-ins { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:6px; }
+.ss-in { display:grid; grid-template-columns:10px 1fr; gap:7px; align-items:start; background:#fff; border:1px solid var(--border); border-radius:8px; padding:7px 9px; font-size:12px; }
+.ss-in > i { width:10px; height:10px; border-radius:50%; margin-top:3px; }
+.ss-in b { color:var(--navy); }
+.ss-in span { font-size:11px; color:var(--muted); }
+.ss-in .ss-yr { font-size:10px; background:#eef2f7; border-radius:10px; padding:1px 6px; color:#334155; }
+body.desk .ss-cell { min-height:128px; padding:9px 10px 8px; }
+body.desk .ss-z { font-size:12px; }
+body.desk .ss-mt { font-size:11px; }
+
 </style>
 </head>
 <body>
@@ -487,7 +517,7 @@ body.desk .kbd-hint { display: inline; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.5</div>
+        <div class="sub">Women's Soccer · v3.6</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -1534,7 +1564,7 @@ function paToggleZero(el) { paZero = el.checked; paRender(); }
 function paSetF(k, v) { paF[k] = v; paRender(); }
 function paQuery(v) { paQ = v.toLowerCase(); paRender(); var i = document.getElementById('paQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }
 function paRender() {
-  var tabs = [['overview', 'Overview'], ['schools', 'Schools'], ['conf', 'Conferences'], ['levels', 'Levels'], ['players', 'Players']];
+  var tabs = [['overview', 'Overview'], ['sweet', 'Sweet spot'], ['schools', 'Schools'], ['conf', 'Conferences'], ['levels', 'Levels'], ['players', 'Players']];
   document.getElementById('paTabs').innerHTML = tabs.map(function(t) {
     return '<button class="pa-tab' + (paView === t[0] ? ' on' : '') + '" onclick="paSetView(\'' + t[0] + '\')">' + t[1] + '</button>';
   }).join('');
@@ -1542,7 +1572,7 @@ function paRender() {
   if (!allPlayers.length || !CURRENT_SEASON) { body.innerHTML = '<div class="loading-note">Players are still loading…</div>'; return; }
   var pool = paPool();
   if (!pool.length) { body.innerHTML = '<div class="loading-note">No portal players found.</div>'; return; }
-  body.innerHTML = ({ overview: paOverview, schools: paSchools, conf: paConfs, levels: paLevels, players: paPlayers })[paView](pool);
+  body.innerHTML = ({ overview: paOverview, sweet: paSweet, schools: paSchools, conf: paConfs, levels: paLevels, players: paPlayers })[paView](pool);
 }
 function paOverview(pool) {
   var rated = pool.filter(function(p) { return p.composite_adj != null; });
@@ -1656,11 +1686,144 @@ function paLevels(pool) {
     '<div class="pa-note">Level is the tier of the school she is leaving. <b>' + step +
     '</b> P4 / High Major players have 800+ minutes, the group most likely to be a step up for UNCW. Open the Players view and filter by level and minutes to list them.</div>';
 }
+// ══ Portal analysis → Sweet spot (Nov 26, 2026, Colin) ══
+// 16 player types = tier of the school she is leaving x minutes in her last season there. For each type: how often past
+// movers came into the home team's market (would come), how often they then became regulars (good enough), and how
+// many in today's portal project as starters for the home team. Built from `transfer_moves` (build_transfer_moves.py:
+// Colin's 2018-2026 portal study followed through 2022-2026 box scores, plus the home team's own roster pages).
+// HOME_TEAM_ID is the one switch for "who the app is set up for" (a settings screen comes later).
+var HOME_TEAM_ID = 2403;
+var ssMoves = null, ssLoading = false, ssZones = null;
+var SS_TIERS = ['P4', 'High Major', 'Mid Major', 'Low Major'], SS_BUCKETS = ['0', '1–299', '300–799', '800+'];
+var SS_PA_BUCKET = { '0': '0 min', '1–299': '1–299 min', '300–799': '300–799 min', '800+': '800+ min' };
+var SS_Z = {
+  sweet:  { l: 'Sweet spot',                      bg: '#dff5ec', fg: '#065f46', ac: '#10b981' },
+  sel:    { l: 'Selective',                       bg: '#ecf5df', fg: '#3f6212', ac: '#65a30d' },
+  upside: { l: 'Upside bet',                      bg: '#fdf1dc', fg: '#7c4a03', ac: '#d97706' },
+  reach:  { l: 'Reach',                           bg: '#e3eefb', fg: '#1e3a8a', ac: '#2563eb' },
+  come:   { l: 'Would come, rarely good enough',  bg: '#eeede8', fg: '#44403c', ac: '#78716c' },
+  no:     { l: 'Not a fit',                       bg: '#f6f5f1', fg: '#78716c', ac: '#a8a29e' },
+  unk:    { l: 'Too few to tell',                 bg: '#f6f5f1', fg: '#78716c', ac: '#a8a29e' }
+};
+function ssHome() { return teamsById[HOME_TEAM_ID] || { short_name: 'your team', tier: 'Mid Major' }; }
+function ssMarket() {
+  var t = ssHome().tier;
+  return t === 'P4' ? ['P4'] : t === 'Low Major' ? ['Mid Major', 'Low Major'] : ['High Major', 'Mid Major'];
+}
+function ssBucket(m) { return m == null ? null : m <= 0 ? '0' : m < 300 ? '1–299' : m < 800 ? '300–799' : '800+'; }
+function ssLoad() {
+  if (ssMoves || ssLoading) return;
+  ssLoading = true;
+  var acc = [];
+  (function page(off) {
+    careerSupa.from('transfer_moves')
+      .select('player_name,from_school,from_tier,from_season,from_minutes,to_team_id,to_tier,to_season,to_minutes,to_best_minutes,source')
+      .range(off, off + 999).then(function(r) {
+        var d = (r && r.data) || []; acc = acc.concat(d);
+        if (d.length === 1000) { page(off + 1000); return; }
+        ssMoves = acc; ssLoading = false; ssZones = null;
+        if (paView === 'sweet' || (paView === 'players' && paP.color === 'zone')) paRender();
+      }, function() { ssMoves = []; ssLoading = false; if (paView === 'sweet') paRender(); });
+  })(0);
+}
+function ssHomeBar() {
+  // the projected rating at the home team of its own regulars (800+ min this season): the median is "a starter for us"
+  var v = allPlayers.filter(function(p) { return p.season === CURRENT_SEASON && p.team_id === HOME_TEAM_ID && (p.minutes || 0) >= 800 && p.proj_uncw != null; })
+    .map(function(p) { return p.proj_uncw; }).sort(function(a, b) { return a - b; });
+  return v.length ? v[Math.floor(v.length / 2)] : 75;
+}
+function ssCells() {
+  if (ssZones) return ssZones;
+  var market = ssMarket(), bar = ssHomeBar(), pool = paPool(), cells = {};
+  SS_TIERS.forEach(function(t) { SS_BUCKETS.forEach(function(b) { cells[t + '|' + b] = { tier: t, b: b, n: 0, fol: 0, mk: 0, reg: 0, pool: 0, projN: 0, good: 0 }; }); });
+  (ssMoves || []).forEach(function(m) {
+    if (m.source === 'roster' || m.from_minutes == null) return;
+    var c = cells[m.from_tier + '|' + ssBucket(m.from_minutes)]; if (!c) return;
+    c.n++;
+    if (m.to_team_id == null) return;
+    c.fol++;
+    if (market.indexOf(m.to_tier) >= 0) { c.mk++; if ((m.to_best_minutes || 0) >= 800) c.reg++; }
+  });
+  pool.forEach(function(p) {
+    var t = paTier(p); if (SS_TIERS.indexOf(t) < 0) return;
+    var c = cells[t + '|' + (p._stub ? '0' : ssBucket(p.minutes || 0))]; if (!c) return;
+    c.pool++;
+    if (p.proj_uncw != null) { c.projN++; if (p.proj_uncw >= bar) c.good++; }
+  });
+  Object.keys(cells).forEach(function(k) {
+    var c = cells[k];
+    c.I = c.fol ? c.mk / c.fol : null; c.K = c.mk ? c.reg / c.mk : null;
+    c.G = (c.b === '300–799' || c.b === '800+') && c.projN >= 5 ? c.good / c.projN : null;
+    var z;
+    if (c.fol < 20 || c.I == null) z = 'unk';
+    else if (c.I < 0.2) z = (c.K || 0) >= 0.5 ? 'reach' : 'no';
+    else if (c.G != null) z = c.G < 0.02 ? ((c.K || 0) >= 0.5 ? 'come' : 'no') : (c.G >= 0.25 && c.K >= 0.6) ? 'sweet' : c.K >= 0.5 ? 'sel' : 'no';
+    else z = (c.K || 0) >= ((c.tier === 'P4' || c.tier === 'High Major') ? 0.45 : 0.5) ? 'upside' : 'no';
+    c.zone = z;
+  });
+  ssZones = cells; ssZones._bar = bar;
+  return cells;
+}
+function ssZoneOf(p) {
+  if (!ssMoves) return null;
+  var t = paTier(p), c = ssCells()[t + '|' + (p._stub ? '0' : ssBucket(p.minutes || 0))];
+  return c ? c.zone : null;
+}
+function ssOpenCell(tier, b) { paF.tier = tier; paF.bucket = SS_PA_BUCKET[b]; paF.award = ''; paP.posG = ''; paP.conf = ''; paQ = ''; paView = 'players'; paRender(); }
+function ssOutcome(m) {
+  var b = m.to_best_minutes;
+  return b == null ? ['Not on file', '#a8a29e'] : b >= 800 ? ['Became a regular', '#10b981'] : b >= 300 ? ['Part-time', '#d97706'] : ['Played little', '#dc2626'];
+}
+function paSweet(pool) {
+  ssLoad();
+  var home = ssHome();
+  if (!ssMoves) return '<div class="loading-note">Loading transfer history…</div>';
+  var cells = ssCells(), mins = ssMarket().map(function(t) { return t.replace(' Major', ''); }).join(' + ');
+  var ins = ssMoves.filter(function(m) { return m.to_team_id === HOME_TEAM_ID; })
+    .sort(function(a, b) { return (b.to_season || '').localeCompare(a.to_season || '') || a.player_name.localeCompare(b.player_name); });
+  var dotsBy = {};
+  ins.forEach(function(m) { var b = ssBucket(m.from_minutes); if (b && SS_TIERS.indexOf(m.from_tier) >= 0) (dotsBy[m.from_tier + '|' + b] = dotsBy[m.from_tier + '|' + b] || []).push(m); });
+  var pct = function(v) { return v == null ? '–' : Math.round(v * 100) + '%'; };
+  var meter = function(lab, v, col) {
+    return '<div class="ss-mt"><span>' + lab + '</span><div class="ss-tr"><div style="width:' + (v == null ? 0 : Math.round(v * 100)) + '%;background:' + col + '"></div></div><b>' + pct(v) + '</b></div>';
+  };
+  var h = '<div class="ss-head">Set up for <b>' + (home.short_name || home.name) + '</b> · ' + (home.tier || '') + ' · market = ' + mins + ' programmes</div>';
+  h += '<div class="ss-grid"><div></div>' + SS_BUCKETS.map(function(b) { return '<div class="ss-ch">' + (b === '0' ? '0' : b) + ' min</div>'; }).join('');
+  SS_TIERS.forEach(function(t) {
+    h += '<div class="ss-rh">' + t.replace(' Major', '') + '</div>';
+    SS_BUCKETS.forEach(function(b) {
+      var c = cells[t + '|' + b], z = SS_Z[c.zone];
+      var dots = (dotsBy[t + '|' + b] || []).map(function(m) { var o = ssOutcome(m); return '<i title="' + m.player_name + ' · ' + o[0] + '" style="background:' + o[1] + '"></i>'; }).join('');
+      h += '<button class="ss-cell" style="background:' + z.bg + ';color:' + z.fg + (c.zone === 'unk' ? ';border:1px dashed #a8a29e' : '') + '" onclick="ssOpenCell(\'' + t + '\',\'' + b + '\')">' +
+        '<div class="ss-dots">' + dots + '</div><div class="ss-z">' + z.l + '</div>' +
+        meter('Come our way', c.I, z.ac) + meter('Regulars', c.K, z.ac) +
+        '<div class="ss-pool">' + c.pool + ' in portal now' + (c.G != null ? ' · <b>' + c.good + '</b> project as starters' : '') + '</div></button>';
+    });
+  });
+  h += '</div>';
+  h += '<div class="ss-legend">' + ['sweet', 'sel', 'upside', 'reach', 'come', 'no'].map(function(k) {
+    return '<span><i style="background:' + SS_Z[k].bg + ';border:1px solid ' + SS_Z[k].ac + '"></i>' + SS_Z[k].l + '</span>'; }).join('') + '</div>';
+  var tot = 0; Object.keys(cells).forEach(function(k) { if (k !== '_bar') tot += cells[k].fol; });
+  h += '<div class="pa-note"><b>Come our way</b> = share of past movers of this type who landed at a ' + mins + ' programme. <b>Regulars</b> = share of those who then played 800+ minutes in a season there. ' +
+    '<b>Project as starters</b> = players in today\'s portal whose projected rating at ' + (home.short_name || 'your team') + ' is at least that of its median regular (' + (ssZones._bar || 0).toFixed(1) + '). ' +
+    'Based on ' + tot.toLocaleString() + ' transfers followed from the 2022-23 to 2025-26 portal cycles. Tap a box to see those players on the chart.</div>';
+  // home team's own transfers in
+  var regs = ins.filter(function(m) { return (m.to_best_minutes || 0) >= 800; }).length;
+  h += '<div class="pa-h">' + (home.short_name || 'Your team') + ' transfers in: ' + ins.length + ' · ' + regs + ' became regulars</div>';
+  h += '<div class="ss-ins">' + ins.map(function(m) {
+    var o = ssOutcome(m), b = ssBucket(m.from_minutes);
+    return '<div class="ss-in"><i style="background:' + o[1] + '"></i><div><b>' + m.player_name + '</b> <span class="ss-yr">' + (m.to_season || '').replace('FA', '') + '</span><br>' +
+      '<span>' + m.from_school + ' · ' + (m.from_tier || '') + ' · ' + (m.from_minutes == null ? 'minutes before not on file' : Math.round(m.from_minutes) + ' min before') +
+      ' → ' + (m.to_best_minutes == null ? 'not on file' : Math.round(m.to_best_minutes) + ' min (best season)') + '</span></div></div>';
+  }).join('') + '</div>';
+  return h;
+}
+
 // ══ Portal analysis → Players: scatter explorer (Nov 26, 2026, Colin) ══
 // Every active portal player as a dot. Pick the two stats, the filters and the colouring; hover for the numbers, click to open
 // her card. 2026 box scores (boxscore_player_games) supply shots, shots on goal, clean sheets and keeper numbers.
 var paBox = null, paBoxLoading = false;
-var paP = { x: 'sh90', y: 'g90', color: 'tier', minMin: 300, posG: '', conf: '' };
+var paP = { x: 'sh90', y: 'g90', color: 'tier', minMin: 300, posG: '', conf: '', zone: '' };
 var PA_M = {
   rating:  { g: 'Overall',     l: 'Rating',                     f: function(p, s) { return p.composite_adj; } },
   proj_u:  { g: 'Overall',     l: 'Projected rating at UNCW',   f: function(p, s) { return p.proj_uncw; } },
@@ -1731,12 +1894,14 @@ function paLoadBox(pool) {
 function paPosG(p) { return PA_GOF[p.primary_pos] || '?'; }
 function paAwardLabel(p) { var a = paAwards(p); return a.aa ? 'All-American' : a.ar ? 'All-Region' : a.ac ? 'All-Conference' : a.ci ? 'Conf. award' : 'No award'; }
 function paColorOf(p) {
+  if (paP.color === 'zone') { var _z = ssZoneOf(p); return _z ? SS_Z[_z].ac : '#cbd5e1'; }
   if (paP.color === 'pos') return PA_GCOL[paPosG(p)];
   if (paP.color === 'bucket') return PA_BCOL[paBucket(p)];
   if (paP.color === 'award') return PA_ACOL[paAwardLabel(p)];
   return PA_COL[paTier(p)];
 }
 function paLegend() {
+  if (paP.color === 'zone') return ['sweet', 'sel', 'upside', 'reach', 'come', 'no'].map(function(k) { return '<span><i style="background:' + SS_Z[k].ac + '"></i>' + SS_Z[k].l + '</span>'; }).join('');
   var m = paP.color === 'pos' ? { 'Goalkeeper': PA_GCOL.GK, 'Defender': PA_GCOL.D, 'Midfielder': PA_GCOL.M, 'Forward': PA_GCOL.F }
         : paP.color === 'bucket' ? PA_BCOL : paP.color === 'award' ? PA_ACOL : PA_COL;
   return Object.keys(m).filter(function(k) { return k !== 'No stats on file' && k !== 'Other'; }).map(function(k) {
@@ -1755,6 +1920,7 @@ function paMetricSel(key, val) {
 }
 function paPlayers(pool) {
   paLoadBox(pool);
+  if (paP.color === 'zone' || paP.zone) ssLoad();
   var sel = function(fn, opts, val) {
     return '<select onchange="' + fn + '(this.value)">' + opts.map(function(o) {
       return '<option value="' + o[0] + '"' + (String(o[0]) === String(val) ? ' selected' : '') + '>' + o[1] + '</option>';
@@ -1766,11 +1932,12 @@ function paPlayers(pool) {
     return '<button class="' + (on ? 'on' : '') + '" onclick="paPreset(' + i + ')">' + q[0] + '</button>';
   }).join('') + '</div>';
   var axes = '<div class="pp-axes"><label>Up ↑ ' + paMetricSel('y', paP.y) + '</label><label>Across → ' + paMetricSel('x', paP.x) + '</label>' +
-    '<label>Colour ' + sel("paSetP.bind(null,'color')", [['tier', 'Level'], ['pos', 'Position'], ['bucket', 'Minutes'], ['award', 'Awards']], paP.color) + '</label></div>';
+    '<label>Colour ' + sel("paSetP.bind(null,'color')", [['tier', 'Level'], ['zone', 'Sweet spot'], ['pos', 'Position'], ['bucket', 'Minutes'], ['award', 'Awards']], paP.color) + '</label></div>';
   var player = '<div class="pp-fgroup"><span>Player</span>' +
     sel("paSetP.bind(null,'posG')", Object.keys(PA_POSG).map(function(k) { return [k, PA_POSG[k]]; }), paP.posG) +
     sel("paSetF.bind(null,'bucket')", [['', 'Any minutes']].concat(PA_BUCKETS.filter(function(b) { return b !== 'No stats on file'; }).map(function(t) { return [t, t]; })), paF.bucket) +
     sel("paSetF.bind(null,'award')", [['', 'Any award status'], ['any', 'Has an award'], ['aa', 'All-American'], ['ar', 'All-Region'], ['ac', 'All-Conference'], ['ci', 'Conf. POY, etc.']], paF.award) +
+    sel("paSetP.bind(null,'zone')", [['', 'Any fit'], ['sweet', 'Sweet spot'], ['sweetsel', 'Sweet spot + selective'], ['upside', 'Upside bets'], ['reach', 'Reach']], paP.zone) +
     sel("paSetP.bind(null,'minMin')", [[0, 'Per 90: any minutes'], [300, 'Per 90: 300+ min'], [450, 'Per 90: 450+ min'], [800, 'Per 90: 800+ min']], paP.minMin) + '</div>';
   var school = '<div class="pp-fgroup"><span>School</span>' +
     sel("paSetF.bind(null,'tier')", [['', 'Any level']].concat(PA_TIERS.filter(function(t) { return t !== 'Other'; }).map(function(t) { return [t, t]; })), paF.tier) +
@@ -1793,6 +1960,7 @@ function paPlotRows() {
     if (paP.conf && (teamsById[p.team_id] || {}).conference_short !== paP.conf) return;
     var g = paPosG(p);
     if (paP.posG === 'OUT' ? g === 'GK' : paP.posG && g !== paP.posG) return;
+    if (paP.zone && ssMoves) { var _zz = ssZoneOf(p); if (paP.zone === 'sweetsel' ? (_zz !== 'sweet' && _zz !== 'sel') : _zz !== paP.zone) return; }
     if (p._stub) { hidden.stub++; return; }
     var s = paBox ? paBox[p.unified_id] : null;
     var mins = s ? s.min : (p.minutes || 0), gkm = s ? s.gkmin : 0;

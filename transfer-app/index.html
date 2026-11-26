@@ -47,7 +47,7 @@ body {
 .rdrop { flex: 1; position: relative; }
 .rdrop > button { width: 100%; padding: 7px 8px; font-size: 12px; text-align: left; background: #fff;
   border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rdrop-panel { display: none; position: absolute; z-index: 50; top: 100%; left: 0; right: 0; min-width: 150px; margin-top: 2px;
+.rdrop-panel { display: none; position: absolute; z-index: 50; top: 100%; left: 0; width: 160px; max-width: 80vw; margin-top: 2px;
   background: #fff; border: 1px solid #d1d5db; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 6px 8px; }
 .rdrop.open .rdrop-panel { display: block; }
 .rdrop-panel label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
@@ -367,7 +367,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.8 · rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.8.2 · filters grouped team/player, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -399,10 +399,14 @@ body {
             <option value="Mid Major">Mid Major</option>
             <option value="Low Major">Low Major</option>
           </select>
-          <div class="rdrop" id="fRatingDrop">
-            <button type="button" id="fRatingBtn" onclick="toggleRatingDrop(event)">Any rating ▾</button>
-            <div class="rdrop-panel" id="fRatingPanel" onclick="event.stopPropagation()"></div>
-          </div>
+          <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
+          <select id="fRpi" onchange="renderPlayers()">
+            <option value="">Any team RPI</option>
+            <option value="25">Team RPI top 25</option>
+            <option value="50">Team RPI top 50</option>
+            <option value="100">Team RPI top 100</option>
+            <option value="200">Team RPI top 200</option>
+          </select>
         </div>
         <div class="filter-row">
           <select id="fMin" onchange="renderPlayers()">
@@ -411,19 +415,15 @@ body {
             <option value="900">900+ min</option>
             <option value="1200">1200+ min</option>
           </select>
-          <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
+          <div class="rdrop" id="fRatingDrop">
+            <button type="button" id="fRatingBtn" onclick="toggleRatingDrop(event)">Any rating ▾</button>
+            <div class="rdrop-panel" id="fRatingPanel" onclick="event.stopPropagation()"></div>
+          </div>
           <select id="fXfer" onchange="renderPlayers()">
             <option value="">Any transfer history</option>
             <option value="active" selected>In the portal now</option>
             <option value="transferred">Has transferred before</option>
             <option value="never">Never transferred</option>
-          </select>
-          <select id="fRpi" onchange="renderPlayers()">
-            <option value="">Any team RPI</option>
-            <option value="25">Team RPI top 25</option>
-            <option value="50">Team RPI top 50</option>
-            <option value="100">Team RPI top 100</option>
-            <option value="200">Team RPI top 200</option>
           </select>
         </div>
         <div class="filter-row">
@@ -1519,7 +1519,7 @@ function buildRatingPanel() {
     }).join('');
   var keys = RATING_BANDS.filter(function(b) { return ratingSel[b[0]]; }).map(function(b) { return b[1]; });
   document.getElementById('fRatingBtn').textContent =
-    (any ? 'Any rating' : keys.length <= 2 ? 'Rating ' + keys.join(', ') : 'Rating: ' + keys.length + ' bands') + ' ▾';
+    (any ? 'Any rating' : keys.length === 1 ? 'Rating ' + keys[0] : 'Rating: ' + keys.length + ' bands') + ' ▾';
 }
 function toggleRatingDrop(e) {
   e.stopPropagation();

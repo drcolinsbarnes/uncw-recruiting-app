@@ -371,7 +371,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.8.3 · filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.8.4 · filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -451,7 +451,7 @@ body {
           </select>
         </div>
         <div class="filter-row">
-          <input type="text" id="fSearch" placeholder="Search name or school…" oninput="renderPlayers()">
+          <input type="text" id="fSearch" placeholder="Search player or team…" oninput="renderPlayers()">
           <button class="clear-btn" onclick="clearFilters()">Clear</button>
           <button class="clear-btn" style="background:#1a2f5e;color:#fff;border-color:#1a2f5e" onclick="openPortalPaste()">＋ Add portal entries</button>
         </div>
@@ -1608,7 +1608,7 @@ function filteredPlayers() {
     }
     if (teamF && String(p.team_id) !== teamF) return false;
     if (q) {
-      var hay = (p._name + ' ' + ((t && t.name) || '')).toLowerCase();
+      var hay = (p._name + ' ' + ((t && t.name) || '') + ' ' + ((t && t.short_name) || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
     }
     return true;

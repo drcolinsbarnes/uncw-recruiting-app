@@ -358,7 +358,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.6 · portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.7 · youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -1187,7 +1187,7 @@ function addPortalStubs(done) {
   var cycle = null, acc = [];
   function page(off) {
     careerSupa.from('transfer_portal')
-      .select('id,unified_id,portal_first,portal_last,source_school,source_conf,division,entered_date,from_team_id,match_conf,status,withdrawn,season')
+      .select('*')  // '*' so the optional youth_id/youth_summary/display_first columns never break the load
       .eq('status', 'active').eq('withdrawn', false).range(off, off + 999)
       .then(function(r) {
         if (r.error) { console.warn('portal stubs', r.error.message); done(); return; }
@@ -1203,7 +1203,7 @@ function addPortalStubs(done) {
           var key = x.unified_id || ('PORTAL-' + x.id);
           if (shown[key]) return; shown[key] = true;
           allPlayers.push({ unified_id: key, _stub: true, _portal: x, season: CURRENT_SEASON, team_id: x.from_team_id,
-            _name: tc(x.portal_first + ' ' + x.portal_last), transfer_history: 'active', primary_pos: null,
+            _name: tc((x.display_first || x.portal_first) + ' ' + x.portal_last), transfer_history: 'active', primary_pos: null,
             composite_adj: null, rating_basis: null, minutes: null });
           pool[key] = true;
         });
@@ -1224,7 +1224,25 @@ function stubCard(p) {
     '<div class="pt-block"><div class="pt-head">In the transfer portal' +
     '<span class="pt-role" style="color:#065f46;background:#d1fae5">Active</span></div>' +
     '<div class="pt-body">Entered ' + (x.entered_date || '—') + '. ' + why + ' No rating or stats to show.</div></div>' +
-    emailBlock(p.unified_id) + '</div>';
+    youthBlock(x) + emailBlock(p.unified_id) + '</div>';
+}
+// Youth background for a portal entry linked to the recruiting app (transfer_portal.youth_id, Nov 26, 2026).
+// Evals are read live from the recruiting app's `ratings` table, so anything logged later shows up here.
+function youthBlock(x) {
+  if (!x.youth_id) return '';
+  setTimeout(function() {
+    recruitSupa.from('ratings').select('stars,notes,event,match_date,coach_name').eq('player_id', x.youth_id)
+      .order('match_date', { ascending: false }).then(function(r) {
+        var el = document.getElementById('yb-' + x.id); if (!el) return;
+        var rows = (r && r.data) || [];
+        el.innerHTML = rows.length ? rows.map(function(v) {
+          return '<div>' + (v.stars != null ? '★ ' + v.stars + ' · ' : '') + (v.event || '') + (v.match_date ? ' · ' + v.match_date : '') +
+            (v.coach_name ? ' · ' + v.coach_name : '') + (v.notes ? '<br><i>' + String(v.notes).replace(/</g, '&lt;') + '</i>' : '') + '</div>';
+        }).join('') : '<span style="color:#6b7280">No youth evals logged.</span>';
+      });
+  }, 0);
+  return '<div class="pt-block"><div class="pt-head">Youth record<span class="pt-conf">' + x.youth_id + '</span></div>' +
+    '<div class="pt-body">' + (x.youth_summary || '').replace(/</g, '&lt;') + '<div id="yb-' + x.id + '" style="margin-top:6px">Loading evals…</div></div></div>';
 }
 // ══ Portal analysis tab (Nov 25, 2026) ══
 // Everything here is derived from rows the Players tab already loaded: allPlayers (CURRENT_SEASON rows flagged

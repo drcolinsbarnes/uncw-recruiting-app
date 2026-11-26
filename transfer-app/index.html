@@ -442,6 +442,31 @@ body.desk #paBody > * { max-width: 1280px; }
 body.desk .pa-tabs { padding-left: 24px; }
 body.desk .kbd-hint { display: inline; }
 .kbd-hint { display: none; color: var(--muted); font-size: 11px; margin-left: 10px; }
+/* Portal analysis → Players scatter (Nov 26, 2026) */
+.pp-presets { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+.pp-presets button { padding:5px 10px; font-size:12px; border:1px solid var(--border); border-radius:20px; background:#fff; color:var(--navy); cursor:pointer; }
+.pp-presets button.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+.pp-axes { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.pp-axes label { font-size:11px; font-weight:700; color:var(--navy); display:flex; align-items:center; gap:5px; }
+.pp-axes select, .pp-fgroup select, .pp-fgroup input { padding:6px 8px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:#fff; min-width:0; }
+.pp-filters { display:flex; flex-direction:column; gap:6px; margin-bottom:6px; }
+.pp-fgroup { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.pp-fgroup > span { font-size:10px; font-weight:800; color:var(--muted); width:42px; text-transform:uppercase; letter-spacing:.04em; }
+.pp-fgroup input { flex:1; min-width:130px; }
+.pp-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:#334155; margin:4px 0; }
+.pp-legend span { display:flex; align-items:center; gap:4px; }
+.pp-legend i { width:10px; height:10px; border-radius:50%; display:inline-block; }
+.pp-legend .pp-sz { color:var(--muted); }
+.pp-wrap { position:relative; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.pp-wrap svg { display:block; width:100%; height:auto; }
+.pp-tip { display:none; position:absolute; pointer-events:none; background:#0f172a; color:#fff; font-size:11px; line-height:1.45; padding:7px 9px; border-radius:6px; max-width:220px; z-index:5; }
+.pp-top { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:6px; }
+.pp-top button { text-align:left; background:#fff; border:1px solid var(--border); border-radius:8px; padding:6px 8px; cursor:pointer; display:grid; grid-template-columns:10px 1fr; column-gap:6px; align-items:center; }
+.pp-top button:hover { background:#e6f7f7; }
+.pp-top i { width:9px; height:9px; border-radius:50%; grid-row:span 2; }
+.pp-top b { font-size:12px; color:var(--navy); }
+.pp-top span { font-size:10px; color:var(--muted); }
+.pp-axes select, .pp-fgroup select { width:auto; flex:0 0 auto; max-width:260px; }
 </style>
 </head>
 <body>
@@ -462,7 +487,7 @@ body.desk .kbd-hint { display: inline; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.4</div>
+        <div class="sub">Women's Soccer · v3.5</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -1631,39 +1656,240 @@ function paLevels(pool) {
     '<div class="pa-note">Level is the tier of the school she is leaving. <b>' + step +
     '</b> P4 / High Major players have 800+ minutes, the group most likely to be a step up for UNCW. Open the Players view and filter by level and minutes to list them.</div>';
 }
+// ══ Portal analysis → Players: scatter explorer (Nov 26, 2026, Colin) ══
+// Every active portal player as a dot. Pick the two stats, the filters and the colouring; hover for the numbers, click to open
+// her card. 2026 box scores (boxscore_player_games) supply shots, shots on goal, clean sheets and keeper numbers.
+var paBox = null, paBoxLoading = false;
+var paP = { x: 'sh90', y: 'g90', color: 'tier', minMin: 300, posG: '', conf: '' };
+var PA_M = {
+  rating:  { g: 'Overall',     l: 'Rating',                     f: function(p, s) { return p.composite_adj; } },
+  proj_u:  { g: 'Overall',     l: 'Projected rating at UNCW',   f: function(p, s) { return p.proj_uncw; } },
+  proj_p4: { g: 'Overall',     l: 'Projected rating at a P4',   f: function(p, s) { return p.proj_p4; } },
+  min:     { g: 'Overall',     l: 'Minutes',                    f: function(p, s) { return s ? s.min : p.minutes; }, cnt: 1 },
+  gs:      { g: 'Overall',     l: 'Starts',                     f: function(p, s) { return s ? s.gs : p.matches_started; }, cnt: 1 },
+  ppg:     { g: 'Overall',     l: 'Team points per game she started', f: function(p, s) { return s && s.gs >= 3 ? s.pts / s.gs : null; } },
+  g:       { g: 'Attacking',   l: 'Goals',                      f: function(p, s) { return s ? s.g : p.goals; }, cnt: 1 },
+  a:       { g: 'Attacking',   l: 'Assists',                    f: function(p, s) { return s ? s.a : p.assists; }, cnt: 1 },
+  gac:     { g: 'Attacking',   l: 'Goal contributions (G+A)',   f: function(p, s) { return s ? s.g + s.a : (p.goals || 0) + (p.assists || 0); }, cnt: 1 },
+  sh:      { g: 'Attacking',   l: 'Shots',                      f: function(p, s) { return s ? s.sh : null; }, cnt: 1 },
+  sog:     { g: 'Attacking',   l: 'Shots on goal',              f: function(p, s) { return s ? s.sog : null; }, cnt: 1 },
+  g90:     { g: 'Attacking',   l: 'Goals per 90',               f: function(p, s) { return s && s.min ? s.g / s.min * 90 : null; }, p90: 1 },
+  a90:     { g: 'Attacking',   l: 'Assists per 90',             f: function(p, s) { return s && s.min ? s.a / s.min * 90 : null; }, p90: 1 },
+  gac90:   { g: 'Attacking',   l: 'G+A per 90',                 f: function(p, s) { return s && s.min ? (s.g + s.a) / s.min * 90 : null; }, p90: 1 },
+  sh90:    { g: 'Attacking',   l: 'Shots per 90',               f: function(p, s) { return s && s.min ? s.sh / s.min * 90 : null; }, p90: 1 },
+  sog90:   { g: 'Attacking',   l: 'Shots on goal per 90',       f: function(p, s) { return s && s.min ? s.sog / s.min * 90 : null; }, p90: 1 },
+  acc:     { g: 'Attacking',   l: 'Shots on target %',          f: function(p, s) { return s && s.sh >= 5 ? s.sog / s.sh * 100 : null; }, pct: 1 },
+  conv:    { g: 'Attacking',   l: 'Goals per shot %',           f: function(p, s) { return s && s.sh >= 5 ? s.g / s.sh * 100 : null; }, pct: 1 },
+  cs:      { g: 'Defending',   l: 'Clean sheets (60+ min games)', f: function(p, s) { return s ? s.cs : null; }, cnt: 1 },
+  cs90:    { g: 'Defending',   l: 'Clean sheets per 90',        f: function(p, s) { return s && s.min ? s.cs / s.min * 90 : null; }, p90: 1 },
+  csr:     { g: 'Defending',   l: 'Clean-sheet rate (% of 60+ min games)', f: function(p, s) { return s && s.g60 >= 3 ? s.cs / s.g60 * 100 : null; }, pct: 1 },
+  tga:     { g: 'Defending',   l: 'Team goals conceded per 60+ min game', f: function(p, s) { return s && s.g60 >= 3 ? s.ga60 / s.g60 : null; }, low: 1 },
+  sv:      { g: 'Goalkeeping', l: 'Saves',                      f: function(p, s) { return s && s.gkmin ? s.sv : null; }, cnt: 1, gk: 1 },
+  sv90:    { g: 'Goalkeeping', l: 'Saves per 90',               f: function(p, s) { return s && s.gkmin ? s.sv / s.gkmin * 90 : null; }, p90: 1, gk: 1 },
+  svp:     { g: 'Goalkeeping', l: 'Save %',                     f: function(p, s) { return s && s.gkmin && (s.sv + s.ga) >= 10 ? s.sv / (s.sv + s.ga) * 100 : null; }, pct: 1, gk: 1 },
+  ga90:    { g: 'Goalkeeping', l: 'Goals against per 90',       f: function(p, s) { return s && s.gkmin ? s.ga / s.gkmin * 90 : null; }, p90: 1, gk: 1, low: 1 },
+  gkcs:    { g: 'Goalkeeping', l: 'Keeper clean sheets',        f: function(p, s) { return s && s.gkmin ? s.gkcs : null; }, cnt: 1, gk: 1 }
+};
+var PA_PRESETS = [
+  ['Value', 'rating', 'proj_u', ''], ['Finishing', 'sh90', 'g90', 'F'], ['Scorer or creator', 'g90', 'a90', ''],
+  ['Shot quality', 'sh90', 'acc', ''], ['Defenders', 'min', 'cs90', 'D'], ['Keepers', 'sv90', 'svp', 'GK'], ['Workload', 'gs', 'rating', '']
+];
+var PA_POSG = { '': 'Any position', 'OUT': 'All outfield', 'D': 'Defenders (CB, OB)', 'M': 'Midfielders (DM, CM, AM)', 'F': 'Forwards (WF, CF)', 'GK': 'Goalkeepers' };
+var PA_GOF = { GK: 'GK', CB: 'D', OB: 'D', DM: 'M', CM: 'M', AM: 'M', WF: 'F', CF: 'F' };
+var PA_GCOL = { GK: '#7c3aed', D: '#1a2f5e', M: '#00a6a0', F: '#f97316', '?': '#cbd5e1' };
+var PA_ACOL = { 'All-American': '#b45309', 'All-Region': '#f59e0b', 'All-Conference': '#00a6a0', 'Conf. award': '#2563eb', 'No award': '#cbd5e1' };
+
+function paLoadBox(pool) {
+  if (paBox || paBoxLoading) return;
+  paBoxLoading = true;
+  var ids = pool.filter(function(p) { return !p._stub; }).map(function(p) { return p.unified_id; });
+  var chunks = []; for (var i = 0; i < ids.length; i += 35) chunks.push(ids.slice(i, i + 35));   // ≤ ~30 games each keeps a chunk under PostgREST's 1000-row cap
+  var acc = {}, left = chunks.length;
+  var finish = function() { paBox = acc; paBoxLoading = false; if (paView === 'players') paRender(); };
+  if (!left) { finish(); return; }
+  chunks.forEach(function(ch) {
+    careerSupa.from('boxscore_player_games')
+      .select('unified_id,team_id,started,minutes,goals,assists,shots,sog,gk_minutes,saves,goals_against,boxscore_games(home_team_id,away_team_id,home_score,away_score)')
+      .eq('season', CURRENT_SEASON).in('unified_id', ch).limit(1000)
+      .then(function(r) {
+        ((r && r.data) || []).forEach(function(g) {
+          var s = acc[g.unified_id] || (acc[g.unified_id] = { gp: 0, gs: 0, min: 0, g: 0, a: 0, sh: 0, sog: 0, cs: 0, g60: 0, ga60: 0, gkmin: 0, sv: 0, ga: 0, gkcs: 0, pts: 0 });
+          var m = g.minutes || 0, bg = g.boxscore_games;
+          s.gp++; if (g.started) s.gs++; s.min += m; s.g += g.goals || 0; s.a += g.assists || 0; s.sh += g.shots || 0; s.sog += g.sog || 0;
+          if (bg && bg.home_score != null && bg.away_score != null) {
+            var home = bg.home_team_id === g.team_id, us = home ? bg.home_score : bg.away_score, them = home ? bg.away_score : bg.home_score;
+            if (m >= 60) { s.g60++; s.ga60 += them; if (them === 0) s.cs++; }
+            if (g.started) s.pts += us > them ? 3 : us === them ? 1 : 0;
+            if ((g.gk_minutes || 0) >= 60 && (g.goals_against || 0) === 0) s.gkcs++;
+          }
+          if (g.gk_minutes) { s.gkmin += g.gk_minutes; s.sv += g.saves || 0; s.ga += g.goals_against || 0; }
+        });
+        if (--left === 0) finish();
+      }, function() { if (--left === 0) finish(); });
+  });
+}
+function paPosG(p) { return PA_GOF[p.primary_pos] || '?'; }
+function paAwardLabel(p) { var a = paAwards(p); return a.aa ? 'All-American' : a.ar ? 'All-Region' : a.ac ? 'All-Conference' : a.ci ? 'Conf. award' : 'No award'; }
+function paColorOf(p) {
+  if (paP.color === 'pos') return PA_GCOL[paPosG(p)];
+  if (paP.color === 'bucket') return PA_BCOL[paBucket(p)];
+  if (paP.color === 'award') return PA_ACOL[paAwardLabel(p)];
+  return PA_COL[paTier(p)];
+}
+function paLegend() {
+  var m = paP.color === 'pos' ? { 'Goalkeeper': PA_GCOL.GK, 'Defender': PA_GCOL.D, 'Midfielder': PA_GCOL.M, 'Forward': PA_GCOL.F }
+        : paP.color === 'bucket' ? PA_BCOL : paP.color === 'award' ? PA_ACOL : PA_COL;
+  return Object.keys(m).filter(function(k) { return k !== 'No stats on file' && k !== 'Other'; }).map(function(k) {
+    return '<span><i style="background:' + m[k] + '"></i>' + k + '</span>';
+  }).join('');
+}
+function paSetP(k, v) { paP[k] = (k === 'minMin') ? +v : v; paRender(); }
+function paPreset(i) { var q = PA_PRESETS[i]; paP.x = q[1]; paP.y = q[2]; paP.posG = q[3]; paRender(); }
+function paMetricSel(key, val) {
+  var groups = {}; Object.keys(PA_M).forEach(function(k) { (groups[PA_M[k].g] = groups[PA_M[k].g] || []).push(k); });
+  return '<select onchange="paSetP(\'' + key + '\',this.value)">' + Object.keys(groups).map(function(g) {
+    return '<optgroup label="' + g + '">' + groups[g].map(function(k) {
+      return '<option value="' + k + '"' + (k === val ? ' selected' : '') + '>' + PA_M[k].l + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('') + '</select>';
+}
 function paPlayers(pool) {
-  var sel = function(id, opts, val) {
-    return '<select onchange="paSetF(\'' + id + '\',this.value)">' + opts.map(function(o) {
-      return '<option value="' + o[0] + '"' + (o[0] === val ? ' selected' : '') + '>' + o[1] + '</option>';
+  paLoadBox(pool);
+  var sel = function(fn, opts, val) {
+    return '<select onchange="' + fn + '(this.value)">' + opts.map(function(o) {
+      return '<option value="' + o[0] + '"' + (String(o[0]) === String(val) ? ' selected' : '') + '>' + o[1] + '</option>';
     }).join('') + '</select>';
   };
-  var ctl = '<div class="pa-ctl">' +
-    sel('tier', [['', 'Any level']].concat(PA_TIERS.map(function(t) { return [t, t]; })), paF.tier) +
-    sel('bucket', [['', 'Any minutes']].concat(PA_BUCKETS.map(function(t) { return [t, t]; })), paF.bucket) +
-    sel('award', [['', 'Any award status'], ['any', 'Has an award'], ['aa', 'All-American'], ['ar', 'All-Region'], ['ac', 'All-Conference'], ['ci', 'Conf. POY, etc.']], paF.award) +
-    sel('pos', [['', 'Any position'], ['GK', 'GK'], ['CB', 'CB'], ['OB', 'OB'], ['DM', 'DM'], ['CM', 'CM'], ['AM', 'AM'], ['WF', 'WF'], ['CF', 'CF']], paF.pos) +
-    '<input type="text" id="paQ" placeholder="Name or school…" value="' + paQ + '" oninput="paQuery(this.value)" style="flex:1;min-width:110px"></div>';
-  var rows = pool.filter(function(p) {
-    if (paF.tier && paTier(p) !== paF.tier) return false;
-    if (paF.bucket && paBucket(p) !== paF.bucket) return false;
-    if (paF.pos && p.primary_pos !== paF.pos) return false;
-    if (paF.award) { var a = paAwards(p); if (!a[paF.award]) return false; }
-    if (paQ) { var t = teamsById[p.team_id] || {}; if ((p._name + ' ' + (t.short_name || t.name || '')).toLowerCase().indexOf(paQ) < 0) return false; }
-    return true;
-  }).sort(function(a, b) { return (b.composite_adj == null ? -1 : b.composite_adj) - (a.composite_adj == null ? -1 : a.composite_adj); });
-  var MAXR = 200, shown = rows.slice(0, MAXR);
-  var tbl = '<table class="pa-table"><thead><tr><th>Player</th><th>Pos</th><th>Min</th><th>Rating</th></tr></thead><tbody>' +
-    shown.map(function(p) {
-      var t = teamsById[p.team_id] || {}, a = paAwards(p);
-      var tags = (a.aa ? '<span class="pa-aw">AA</span>' : '') + (a.ar ? '<span class="pa-aw">AR</span>' : '') + (a.ac ? '<span class="pa-aw">AC</span>' : '') + (a.ci ? '<span class="pa-aw">POY</span>' : '');
-      return '<tr class="pa-click" onclick="openPlayerDetail(\'' + p.unified_id + '\',\'' + p.season + '\',' + (p.team_id || 'null') + ')"><td><b>' + p._name + '</b>' + tags +
-        '<div class="sub">' + (t.short_name || t.name || '') + (t.tier ? ' · ' + t.tier : '') + '</div></td><td>' + (p.primary_pos || 'N/A') + '</td><td>' +
-        (p.minutes == null ? '—' : Math.round(p.minutes)) + '</td><td><b>' + (p.composite_adj == null ? 'n/a' : Math.round(p.composite_adj)) + '</b></td></tr>';
-    }).join('') + '</tbody></table>';
-  return ctl + '<div class="pa-note">' + rows.length + ' players' + (rows.length > MAXR ? ' · showing top ' + MAXR + ' by rating' : '') +
-    '. AA = All-American, AR = All-Region, AC = All-Conference, POY = conference player/GK of the year or similar (2025–26).</div>' +
-    (rows.length ? tbl : '<div class="loading-note">Nothing matches.</div>');
+  var confs = {}; pool.forEach(function(p) { var t = teamsById[p.team_id] || {}; if (t.conference_short) confs[t.conference_short] = 1; });
+  var presets = '<div class="pp-presets">' + PA_PRESETS.map(function(q, i) {
+    var on = paP.x === q[1] && paP.y === q[2] && paP.posG === q[3];
+    return '<button class="' + (on ? 'on' : '') + '" onclick="paPreset(' + i + ')">' + q[0] + '</button>';
+  }).join('') + '</div>';
+  var axes = '<div class="pp-axes"><label>Up ↑ ' + paMetricSel('y', paP.y) + '</label><label>Across → ' + paMetricSel('x', paP.x) + '</label>' +
+    '<label>Colour ' + sel("paSetP.bind(null,'color')", [['tier', 'Level'], ['pos', 'Position'], ['bucket', 'Minutes'], ['award', 'Awards']], paP.color) + '</label></div>';
+  var player = '<div class="pp-fgroup"><span>Player</span>' +
+    sel("paSetP.bind(null,'posG')", Object.keys(PA_POSG).map(function(k) { return [k, PA_POSG[k]]; }), paP.posG) +
+    sel("paSetF.bind(null,'bucket')", [['', 'Any minutes']].concat(PA_BUCKETS.filter(function(b) { return b !== 'No stats on file'; }).map(function(t) { return [t, t]; })), paF.bucket) +
+    sel("paSetF.bind(null,'award')", [['', 'Any award status'], ['any', 'Has an award'], ['aa', 'All-American'], ['ar', 'All-Region'], ['ac', 'All-Conference'], ['ci', 'Conf. POY, etc.']], paF.award) +
+    sel("paSetP.bind(null,'minMin')", [[0, 'Per 90: any minutes'], [300, 'Per 90: 300+ min'], [450, 'Per 90: 450+ min'], [800, 'Per 90: 800+ min']], paP.minMin) + '</div>';
+  var school = '<div class="pp-fgroup"><span>School</span>' +
+    sel("paSetF.bind(null,'tier')", [['', 'Any level']].concat(PA_TIERS.filter(function(t) { return t !== 'Other'; }).map(function(t) { return [t, t]; })), paF.tier) +
+    sel("paSetP.bind(null,'conf')", [['', 'Any conference']].concat(Object.keys(confs).sort().map(function(c) { return [c, c]; })), paP.conf) +
+    '<input type="text" id="paQ" placeholder="Find a player or school…" value="' + paQ + '" oninput="paQuery(this.value)"></div>';
+  var loading = !paBox ? '<div class="pa-note">Loading 2026 box scores for shots, clean sheets and keeper numbers…</div>' : '';
+  setTimeout(paDraw, 0);
+  return presets + axes + '<div class="pp-filters">' + player + school + '</div>' + loading +
+    '<div class="pp-legend">' + paLegend() + '<span class="pp-sz">dot size = minutes</span></div>' +
+    '<div id="paPlotWrap" class="pp-wrap"><svg id="paPlot"></svg><div id="paTip" class="pp-tip"></div></div>' +
+    '<div class="pa-note" id="paPlotNote"></div><div id="paTop"></div>';
 }
+function paPlotRows() {
+  var pool = paPool(), X = PA_M[paP.x], Y = PA_M[paP.y], hidden = { stub: 0, thin: 0 };
+  var out = [];
+  pool.forEach(function(p) {
+    if (paF.tier && paTier(p) !== paF.tier) return;
+    if (paF.bucket && paBucket(p) !== paF.bucket) return;
+    if (paF.award) { var a = paAwards(p); if (!a[paF.award]) return; }
+    if (paP.conf && (teamsById[p.team_id] || {}).conference_short !== paP.conf) return;
+    var g = paPosG(p);
+    if (paP.posG === 'OUT' ? g === 'GK' : paP.posG && g !== paP.posG) return;
+    if (p._stub) { hidden.stub++; return; }
+    var s = paBox ? paBox[p.unified_id] : null;
+    var mins = s ? s.min : (p.minutes || 0), gkm = s ? s.gkmin : 0;
+    var need = function(M) { return M.p90 && (M.gk ? gkm : mins) < paP.minMin; };
+    if (need(X) || need(Y)) { hidden.thin++; return; }
+    var x = X.f(p, s), y = Y.f(p, s);
+    if (x == null || y == null || isNaN(x) || isNaN(y)) { hidden.thin++; return; }
+    out.push({ p: p, x: x, y: y, m: mins });
+  });
+  return { rows: out, hidden: hidden };
+}
+function paTicks(lo, hi, n) {
+  var span = hi - lo || 1, step = Math.pow(10, Math.floor(Math.log10(span / n))), err = span / n / step;
+  step *= err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+  var t = [], v = Math.ceil(lo / step) * step; for (; v <= hi + 1e-9; v += step) t.push(+v.toFixed(6)); return t;
+}
+function paFmt(M, v) { if (v == null) return '—'; return M.pct ? v.toFixed(0) + '%' : M.cnt ? String(Math.round(v)) : Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2); }
+function paMedian(a) { a = a.slice().sort(function(x, y) { return x - y; }); var n = a.length; return n ? (n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2) : 0; }
+function paDraw() {
+  var svg = document.getElementById('paPlot'), wrap = document.getElementById('paPlotWrap');
+  if (!svg || !wrap) return;
+  var R = paPlotRows(), rows = R.rows, X = PA_M[paP.x], Y = PA_M[paP.y];
+  var W = Math.max(300, wrap.clientWidth), H = isDesk() ? Math.min(560, Math.max(380, window.innerHeight - 360)) : 340;
+  var L = 46, Rm = 12, T = 12, B = 40;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H);
+  var note = document.getElementById('paPlotNote');
+  if (!rows.length) { svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" text-anchor="middle" font-size="13" fill="#64748b">No players match these filters.</text>'; if (note) note.textContent = ''; document.getElementById('paTop').innerHTML = ''; return; }
+  var xs = rows.map(function(r) { return r.x; }), ys = rows.map(function(r) { return r.y; });
+  var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  var px = (x1 - x0) * 0.05 || 1, py = (y1 - y0) * 0.06 || 1; x0 -= px; x1 += px; y0 -= py; y1 += py;
+  if (Math.min.apply(null, xs) >= 0) x0 = Math.max(x0, -px * 0.5);
+  if (Math.min.apply(null, ys) >= 0) y0 = Math.max(y0, -py * 0.5);
+  var sx = function(v) { var f = (v - x0) / (x1 - x0); return L + (X.low ? 1 - f : f) * (W - L - Rm); };
+  var sy = function(v) { var f = (v - y0) / (y1 - y0); return T + (Y.low ? f : 1 - f) * (H - T - B); };
+  var h = '';
+  paTicks(x0, x1, W < 500 ? 4 : 7).forEach(function(v) { var X_ = sx(v); h += '<line x1="' + X_ + '" x2="' + X_ + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#eef2f7"/><text x="' + X_ + '" y="' + (H - B + 14) + '" text-anchor="middle" font-size="10" fill="#94a3b8">' + paFmt(X, v) + '</text>'; });
+  paTicks(y0, y1, 6).forEach(function(v) { var Y_ = sy(v); h += '<line x1="' + L + '" x2="' + (W - Rm) + '" y1="' + Y_ + '" y2="' + Y_ + '" stroke="#eef2f7"/><text x="' + (L - 6) + '" y="' + (Y_ + 3) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + paFmt(Y, v) + '</text>'; });
+  var mx = paMedian(xs), my = paMedian(ys);
+  h += '<line x1="' + sx(mx) + '" x2="' + sx(mx) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#94a3b8" stroke-dasharray="4 3"/>';
+  h += '<line x1="' + L + '" x2="' + (W - Rm) + '" y1="' + sy(my) + '" y2="' + sy(my) + '" stroke="#94a3b8" stroke-dasharray="4 3"/>';
+  h += '<text x="' + (W - Rm - 4) + '" y="' + (T + 12) + '" text-anchor="end" font-size="10" fill="#00a6a0" font-weight="700">above the median on both ↗</text>';
+  h += '<text x="' + ((L + W - Rm) / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">' + X.l + (X.low ? ' (fewer is better →)' : '') + '</text>';
+  h += '<text transform="translate(12,' + ((T + H - B) / 2) + ') rotate(-90)" text-anchor="middle" font-size="11" fill="#334155" font-weight="700">' + Y.l + (Y.low ? ' (fewer is better ↑)' : '') + '</text>';
+  // rank for labels: distance into the top-right
+  var rx = rows.slice().sort(function(a, b) { return a.x - b.x; }), ry = rows.slice().sort(function(a, b) { return a.y - b.y; });
+  rx.forEach(function(r, i) { r.px = X.low ? 1 - i / rows.length : i / rows.length; }); ry.forEach(function(r, i) { r.py = Y.low ? 1 - i / rows.length : i / rows.length; });
+  rows.forEach(function(r) { r.score = Math.min(r.px, r.py) + 0.3 * (r.px + r.py); });
+  var top = rows.slice().sort(function(a, b) { return b.score - a.score; }).slice(0, W < 500 ? 5 : 9);
+  var labelled = {}; if (!paQ) top.forEach(function(r) { labelled[r.p.unified_id] = 1; });   // while searching, label only the matches
+  var jit = function(M, id) { if (!M.cnt) return 0; var c = 0; for (var i = 0; i < id.length; i++) c = (c * 31 + id.charCodeAt(i)) % 997; return (c / 997 - 0.5) * 0.5; };
+  rows.sort(function(a, b) { return b.m - a.m; });
+  rows.forEach(function(r, i) {
+    var p = r.p, t = teamsById[p.team_id] || {}, hit = paQ && (p._name + ' ' + (t.short_name || t.name || '')).toLowerCase().indexOf(paQ) >= 0;
+    r.cx = sx(r.x + jit(X, p.unified_id)); r.cy = sy(r.y + jit(Y, p.unified_id + 'y'));
+    var rad = 2.5 + Math.sqrt(Math.min(r.m, 1800) / 1800) * 5, dim = paQ && !hit;
+    h += '<circle cx="' + r.cx.toFixed(1) + '" cy="' + r.cy.toFixed(1) + '" r="' + rad.toFixed(1) + '" fill="' + paColorOf(p) + '" fill-opacity="' + (dim ? 0.12 : 0.78) +
+      '" stroke="' + (hit ? '#0f172a' : '#fff') + '" stroke-width="' + (hit ? 2 : 0.8) + '" data-i="' + i + '" style="cursor:pointer"/>';
+    if (hit) labelled[p.unified_id] = 1;
+  });
+  var placed = [];
+  rows.slice().sort(function(a, b) { return b.score - a.score; }).forEach(function(r) {
+    if (!labelled[r.p.unified_id]) return;
+    var right = r.cx < W - 130, lx = r.cx + (right ? 8 : -8), w = r.p._name.length * 6;
+    var bx0 = right ? lx : lx - w, clash = placed.some(function(q) { return Math.abs(q.y - r.cy) < 12 && bx0 < q.x1 && bx0 + w > q.x0; });
+    if (clash) return;
+    placed.push({ x0: bx0, x1: bx0 + w, y: r.cy });
+    h += '<text x="' + (r.cx + (right ? 8 : -8)) + '" y="' + (r.cy + 3) + '" text-anchor="' + (right ? 'start' : 'end') + '" font-size="10.5" fill="#0f172a" font-weight="600" style="pointer-events:none;paint-order:stroke" stroke="#fff" stroke-width="3">' + r.p._name.replace(/</g, '') + '</text>';
+  });
+  svg.innerHTML = h;
+  var tip = document.getElementById('paTip');
+  svg.onmousemove = function(e) {
+    var c = e.target.getAttribute && e.target.getAttribute('data-i');
+    if (c == null) { tip.style.display = 'none'; return; }
+    var r = rows[+c], p = r.p, t = teamsById[p.team_id] || {};
+    tip.innerHTML = '<b>' + p._name + '</b> · ' + (p.primary_pos || 'N/A') + '<br>' + (t.short_name || t.name || '') + ' · ' + (t.conference_short || '') + ' · ' + paTier(p) +
+      '<br>' + Y.l + ': <b>' + paFmt(Y, r.y) + '</b><br>' + X.l + ': <b>' + paFmt(X, r.x) + '</b><br>' + Math.round(r.m) + ' min · rating ' + (p.composite_adj == null ? 'n/a' : Math.round(p.composite_adj)) +
+      (paAwardLabel(p) !== 'No award' ? '<br>' + paAwardLabel(p) : '');
+    var b = wrap.getBoundingClientRect(), lx = e.clientX - b.left, ly = e.clientY - b.top;
+    tip.style.display = 'block'; tip.style.left = Math.min(lx + 12, b.width - 200) + 'px'; tip.style.top = Math.max(0, ly - 10) + 'px';
+  };
+  svg.onmouseleave = function() { tip.style.display = 'none'; };
+  svg.onclick = function(e) {
+    var c = e.target.getAttribute && e.target.getAttribute('data-i'); if (c == null) return;
+    var p = rows[+c].p; openPlayerDetail(p.unified_id, p.season, p.team_id || null);
+  };
+  if (note) note.textContent = rows.length + ' players plotted' + (R.hidden.thin ? ' · ' + R.hidden.thin + ' hidden (too few minutes or no value for these stats)' : '') +
+    (R.hidden.stub ? ' · ' + R.hidden.stub + ' with no stats on file' : '') + '. Dashed lines are the medians of the players shown.' +
+    (paBox ? '' : ' Shots, clean sheets and keeper stats appear once the box scores load.');
+  var best = top.slice(0, 8);
+  document.getElementById('paTop').innerHTML = '<div class="pa-h">Furthest into the top-right</div><div class="pp-top">' + best.map(function(r, i) {
+    var t = teamsById[r.p.team_id] || {};
+    return '<button onclick="openPlayerDetail(\'' + r.p.unified_id + '\',\'' + r.p.season + '\',' + (r.p.team_id || 'null') + ')"><i style="background:' + paColorOf(r.p) + '"></i><b>' + r.p._name + '</b><span>' +
+      (t.short_name || t.name || '') + ' · ' + paFmt(Y, r.y) + ' / ' + paFmt(X, r.x) + '</span></button>';
+  }).join('') + '</div>';
+}
+window.addEventListener('resize', function() { if (paView === 'players' && document.getElementById('paPlot')) paDraw(); });
+
 
 var activePool = {};   // unified_id -> true if the player has a CURRENT_SEASON row
 

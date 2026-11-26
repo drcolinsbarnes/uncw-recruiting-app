@@ -365,23 +365,17 @@ body {
         </div>
         <div class="filter-row">
           <select id="fMin" onchange="renderPlayers()">
-            <option value="0">Any minutes</option>
-            <option value="450" selected>450+ min (rated)</option>
+            <option value="0" selected>Any minutes</option>
+            <option value="450">450+ min (rated)</option>
             <option value="900">900+ min</option>
             <option value="1200">1200+ min</option>
           </select>
           <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
           <select id="fXfer" onchange="renderPlayers()">
             <option value="">Any transfer history</option>
-            <option value="active">In the portal now</option>
+            <option value="active" selected>In the portal now</option>
             <option value="transferred">Has transferred before</option>
             <option value="never">Never transferred</option>
-          </select>
-          <select id="fEmail" onchange="renderPlayers()">
-            <option value="">Any email interest</option>
-            <option value="any">Emailed UNCW</option>
-            <option value="2">Emailed 2+ times</option>
-            <option value="recent">Emailed in last 14 days</option>
           </select>
           <select id="fRpi" onchange="renderPlayers()">
             <option value="">Any team RPI</option>
@@ -389,6 +383,22 @@ body {
             <option value="50">Team RPI top 50</option>
             <option value="100">Team RPI top 100</option>
             <option value="200">Team RPI top 200</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <select id="fEmail" onchange="renderPlayers()">
+            <option value="">Any email interest</option>
+            <option value="any">Emailed UNCW</option>
+            <option value="2">Emailed 2+ times</option>
+            <option value="recent">Emailed in last 14 days</option>
+          </select>
+          <select id="fAward" onchange="renderPlayers()">
+            <option value="">Any college award</option>
+            <option value="all_america">All-American</option>
+            <option value="all_region">All-Region</option>
+            <option value="all_conference">All-Conference</option>
+            <option value="conference_individual">Conference player / GK of the year, etc.</option>
+            <option value="any">Any award</option>
           </select>
         </div>
         <div class="filter-row">
@@ -957,6 +967,7 @@ function loadAwards(offset, acc) {
       batch.forEach(function(a) { (acc[a.unified_id] = acc[a.unified_id] || []).push(a); });
       if (batch.length === PAGE) { loadAwards(offset + PAGE, acc); return; }
       awardsByPlayer = acc;
+      if (document.getElementById('fAward').value) renderPlayers();
     });
 }
 
@@ -1216,10 +1227,11 @@ function clearFilters() {
   document.getElementById('fPos').value    = '';
   document.getElementById('fConf').value   = '';
   document.getElementById('fTier').value   = '';
-  document.getElementById('fMin').value    = '450';
+  document.getElementById('fMin').value    = '0';
   document.getElementById('fRpi').value    = '';
-  document.getElementById('fXfer').value   = '';
+  document.getElementById('fXfer').value   = 'active';
   document.getElementById('fEmail').value = '';
+  document.getElementById('fAward').value = '';
   document.getElementById('fTeam').value   = '';
   document.getElementById('fSearch').value = '';
   sortKey = 'composite_adj'; sortDir = -1;
@@ -1235,6 +1247,7 @@ function filteredPlayers() {
   var rpi    = parseInt(document.getElementById('fRpi').value, 10) || 0;
   var xfer   = document.getElementById('fXfer').value;
   var emailF = document.getElementById('fEmail').value;
+  var awardF = document.getElementById('fAward').value;
   var teamF  = document.getElementById('fTeam').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
@@ -1252,6 +1265,11 @@ function filteredPlayers() {
     if (minMin && !q && (p.minutes || 0) < minMin) return false;   // a name/school search always finds her, whatever her minutes
     if (rpi && (!t || !t.rpi_rank || t.rpi_rank > rpi)) return false;
     if (xfer && p.transfer_history !== xfer) return false;
+    if (awardF) {
+      var aw = awardsByPlayer[p.unified_id] || [];
+      if (!aw.length) return false;
+      if (awardF !== 'any' && !aw.some(function(a) { return a.award_type === awardF; })) return false;
+    }
     if (emailF) {
       var ei = emailInterest[p.unified_id];
       if (!ei) return false;
@@ -1333,7 +1351,7 @@ function renderPlayers() {
   }).join('') + '</tr>';
 
   // The 400 cap silently hid most of the portal (1,300+ entries) — Nov 25, 2026. A focused filter lifts it.
-  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value) ? 5000 : 400;
+  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value) ? 5000 : 400;
   var body = rows.slice(0, MAX).map(function(p) {
     var t = teamsById[p.team_id] || {};
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';

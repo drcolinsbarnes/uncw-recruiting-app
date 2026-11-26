@@ -395,7 +395,7 @@ table.gl a { color: #00a6a0; text-decoration: none; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.1 · low-minutes seasons lean on the last full season · game log + possible-injury flag on cards, All-Region/All-American colours · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v3.2 · low-minutes seasons lean on the last full season (+ team-improvement credit) · game log + possible-injury flag on cards, All-Region/All-American colours · every portal player is a player (0-min rows, N/A position, NCAA ID, portal history), filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2548,7 +2548,8 @@ function overallExplainer(p, pos, t) {
     return '<div class="basis-note"><b>Leans on her last full season.</b> She played ' + m + ' minutes this season, too few to ' +
       'replace a full season' + (bp ? ' (' + seasonYear(bp.season) + ': ' + Math.round(bp.rating) + ', ' + bp.minutes.toLocaleString() + ' min)' : '') +
       ', so this season counts for ' + Math.round(w * 100) + '% of the number. Tested on 144 players who had a full season, then a ' +
-      'low one, then a full one again: they came back to their earlier level, and the low season alone missed by twice as much.</div>';
+      'low one, then a full one again: they came back to their earlier level, and the low season alone missed by twice as much. ' +
+      'If her team has got stronger since, she gets credit for that; a team that got weaker never lowers her.</div>';
   }
   if (p.rating_basis === 'bench (floor only)') {
     var tn = t && t.tier ? t.tier : 'her level';

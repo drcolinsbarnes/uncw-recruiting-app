@@ -43,6 +43,10 @@ body {
 .filter-bar { background: #fff; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .filter-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .filter-row:last-child { margin-bottom: 0; }
+/* Nov 26, 2026: let every control shrink to its share of the row instead of growing to its longest option */
+.filter-row > * { min-width: 0; }
+.fgroup { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #64748b; margin: 2px 0 3px; }
+.fgroup ~ .fgroup { margin-top: 6px; }
 /* Rating band multi-select (Nov 26, 2026) */
 .rdrop { flex: 1; position: relative; }
 .rdrop > button { width: 100%; padding: 7px 8px; font-size: 12px; text-align: left; background: #fff;
@@ -367,7 +371,7 @@ body {
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v2.8.2 · filters grouped team/player, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
+        <div class="sub">Women's Soccer · v2.8.3 · filters grouped player/team, rating-band filter, youth record on portal cards, portal analysis tab, all portal entries shown, emailed-interest filter · projected rating at UNCW / P4, portal paste-in, shortlist, visits</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -381,6 +385,7 @@ body {
          unified_players), NOT portal_players (B7 hasn't been run yet). ══ -->
     <div id="screenPlayers" class="screen active">
       <div class="filter-bar">
+        <div class="fgroup">Player</div>
         <div class="filter-row">
           <select id="fSeason" onchange="renderPlayers()"></select>
           <select id="fPos" onchange="renderPlayers()">
@@ -389,32 +394,14 @@ body {
             <option value="DM">DM</option><option value="CM">CM</option><option value="AM">AM</option>
             <option value="WF">WF</option><option value="CF">CF</option>
           </select>
-        </div>
-        <div class="filter-row">
-          <select id="fConf" onchange="renderPlayers()"><option value="">All Conferences</option></select>
-          <select id="fTier" onchange="renderPlayers()">
-            <option value="">All Tiers</option>
-            <option value="P4">P4</option>
-            <option value="High Major">High Major</option>
-            <option value="Mid Major">Mid Major</option>
-            <option value="Low Major">Low Major</option>
-          </select>
-          <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
-          <select id="fRpi" onchange="renderPlayers()">
-            <option value="">Any team RPI</option>
-            <option value="25">Team RPI top 25</option>
-            <option value="50">Team RPI top 50</option>
-            <option value="100">Team RPI top 100</option>
-            <option value="200">Team RPI top 200</option>
-          </select>
-        </div>
-        <div class="filter-row">
           <select id="fMin" onchange="renderPlayers()">
             <option value="0" selected>Any minutes</option>
             <option value="450">450+ min (rated)</option>
             <option value="900">900+ min</option>
             <option value="1200">1200+ min</option>
           </select>
+        </div>
+        <div class="filter-row">
           <div class="rdrop" id="fRatingDrop">
             <button type="button" id="fRatingBtn" onclick="toggleRatingDrop(event)">Any rating ▾</button>
             <div class="rdrop-panel" id="fRatingPanel" onclick="event.stopPropagation()"></div>
@@ -438,8 +425,29 @@ body {
             <option value="all_america">All-American</option>
             <option value="all_region">All-Region</option>
             <option value="all_conference">All-Conference</option>
-            <option value="conference_individual">Conference player / GK of the year, etc.</option>
+            <option value="conference_individual">Conf. player/GK of year</option>
             <option value="any">Any award</option>
+          </select>
+        </div>
+        <div class="fgroup">Team</div>
+        <div class="filter-row">
+          <select id="fConf" onchange="renderPlayers()"><option value="">All Conferences</option></select>
+          <select id="fTier" onchange="renderPlayers()">
+            <option value="">All Tiers</option>
+            <option value="P4">P4</option>
+            <option value="High Major">High Major</option>
+            <option value="Mid Major">Mid Major</option>
+            <option value="Low Major">Low Major</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <select id="fTeam" onchange="renderPlayers()"><option value="">All Teams</option></select>
+          <select id="fRpi" onchange="renderPlayers()">
+            <option value="">Any RPI</option>
+            <option value="25">RPI top 25</option>
+            <option value="50">RPI top 50</option>
+            <option value="100">RPI top 100</option>
+            <option value="200">RPI top 200</option>
           </select>
         </div>
         <div class="filter-row">

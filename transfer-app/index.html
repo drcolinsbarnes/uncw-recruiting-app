@@ -468,6 +468,8 @@ body.desk .kbd-hint { display: inline; }
 .pp-top span { font-size:10px; color:var(--muted); }
 .pp-axes select, .pp-fgroup select { width:auto; flex:0 0 auto; max-width:260px; }
 /* Portal analysis → Sweet spot (Nov 26, 2026) */
+.fit-tag { font-size:9px; font-weight:800; padding:1px 6px; border-radius:20px; margin-left:4px; border:1px solid; white-space:nowrap; vertical-align:1px; }
+.fit-tag.fit-big { font-size:11px; padding:2px 8px; margin-left:6px; }
 .ss-head { font-size:12px; color:var(--muted); margin:2px 0 8px; }
 .ss-head b { color:var(--navy); }
 .ss-grid { display:grid; grid-template-columns:44px repeat(4, minmax(0,1fr)); gap:5px; }
@@ -517,7 +519,7 @@ body.desk .ss-mt { font-size:11px; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v3.6</div>
+        <div class="sub">Women's Soccer · v3.7</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -559,6 +561,16 @@ body.desk .ss-mt { font-size:11px; }
             <option value="active" selected>In the portal now</option>
             <option value="transferred">Has transferred before</option>
             <option value="never">Never transferred</option>
+          </select>
+          <select id="fFit" onchange="renderPlayers()" title="Sweet spot fit for the team the app is set up for (Portal analysis → Sweet spot)">
+            <option value="">Any fit</option>
+            <option value="sweet">Sweet spot</option>
+            <option value="sweetsel">Sweet spot + selective</option>
+            <option value="sel">Selective</option>
+            <option value="upside">Upside bets</option>
+            <option value="reach">Reach</option>
+            <option value="come">Would come, rarely good enough</option>
+            <option value="no">Not a fit</option>
           </select>
         </div>
         <div class="filter-row">
@@ -1048,7 +1060,7 @@ function newPlayerCard(p) {
     '<div class="player-name">' + p._name + '</div>' +
     '<div class="player-sub">' + (t.short_name || t.name || 'Unknown school') + ' · ' + (t.conference_short || t.conference || '—') + '</div>' +
     '<div class="player-sub" style="margin-top:5px"><span class="pos-tag">' + (p.primary_pos || 'N/A') + '</span>' +
-      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') +
+      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') + ssFitTag(p, true) +
       ncaaTag(p.unified_id) + '</div>' +
     '<div class="pt-block"><div class="pt-head">' + (p.season || '').replace('FA', '') + ' season</div>' +
       '<div class="pt-body">0 games · 0 starts · 0 minutes · 0 goals · 0 assists. No rating: she has not played, so there is nothing to rate yet.</div></div>' +
@@ -1224,6 +1236,7 @@ function attachNames() {
       addPortalStubs(function() {
       populateTeamFilter();
       renderPlayers();
+      ssZones = null; ssLoad();
       loadTeamRatings();
       loadInterest();
       loadEmailInterest();
@@ -1723,6 +1736,7 @@ function ssLoad() {
         if (d.length === 1000) { page(off + 1000); return; }
         ssMoves = acc; ssLoading = false; ssZones = null;
         if (paView === 'sweet' || (paView === 'players' && paP.color === 'zone')) paRender();
+        if (typeof renderPlayers === 'function') renderPlayers();
       }, function() { ssMoves = []; ssLoading = false; if (paView === 'sweet') paRender(); });
   })(0);
 }
@@ -1758,6 +1772,7 @@ function ssCells() {
     if (c.fol < 20 || c.I == null) z = 'unk';
     else if (c.I < 0.2) z = (c.K || 0) >= 0.5 ? 'reach' : 'no';
     else if (c.G != null) z = c.G < 0.02 ? ((c.K || 0) >= 0.5 ? 'come' : 'no') : (c.G >= 0.25 && c.K >= 0.6) ? 'sweet' : c.K >= 0.5 ? 'sel' : 'no';
+    else if (c.b === '300–799' || c.b === '800+') z = (c.K || 0) >= 0.55 ? 'sel' : (c.K || 0) >= 0.4 ? 'come' : 'no';   // too few projections to judge 'good enough now'
     else z = (c.K || 0) >= ((c.tier === 'P4' || c.tier === 'High Major') ? 0.45 : 0.5) ? 'upside' : 'no';
     c.zone = z;
   });
@@ -1768,6 +1783,28 @@ function ssZoneOf(p) {
   if (!ssMoves) return null;
   var t = paTier(p), c = ssCells()[t + '|' + (p._stub ? '0' : ssBucket(p.minutes || 0))];
   return c ? c.zone : null;
+}
+function ssFitOf(uid) {
+  if (!ssMoves) return null;
+  var c = ssCells();
+  if (!c._byUid) {
+    c._byUid = {};
+    allPlayers.forEach(function(p) {
+      if (p.season !== CURRENT_SEASON || c._byUid[p.unified_id]) return;
+      var cell = c[paTier(p) + '|' + (p._stub ? '0' : ssBucket(p.minutes || 0))];
+      if (cell) c._byUid[p.unified_id] = cell.zone;
+    });
+  }
+  return c._byUid[uid] || null;
+}
+var SS_SHORT = { sweet: 'Sweet spot', sel: 'Selective', upside: 'Upside', reach: 'Reach', come: 'Would come', no: 'Not a fit' };
+function ssFitTag(p, big) {
+  // shown on portal players (and on anyone once the Fit filter is in use); 'too few to tell' shows nothing
+  if (!big && p.transfer_history !== 'active' && !document.getElementById('fFit').value) return '';
+  var z = ssFitOf(p.unified_id); if (!z || z === 'unk') return '';
+  var Z = SS_Z[z];
+  return '<span class="fit-tag' + (big ? ' fit-big' : '') + '" style="background:' + Z.bg + ';color:' + Z.fg + ';border-color:' + Z.ac + '" title="' +
+    Z.l + ' for ' + (ssHome().short_name || 'your team') + ': ' + paTier(p) + ', ' + (p._stub ? 0 : Math.round(p.minutes || 0)) + ' min this season (Portal analysis → Sweet spot)">' + SS_SHORT[z] + '</span>';
 }
 function ssOpenCell(tier, b) { paF.tier = tier; paF.bucket = SS_PA_BUCKET[b]; paF.award = ''; paP.posG = ''; paP.conf = ''; paQ = ''; paView = 'players'; paRender(); }
 function ssOutcome(m) {
@@ -1803,7 +1840,7 @@ function paSweet(pool) {
   h += '</div>';
   h += '<div class="ss-legend">' + ['sweet', 'sel', 'upside', 'reach', 'come', 'no'].map(function(k) {
     return '<span><i style="background:' + SS_Z[k].bg + ';border:1px solid ' + SS_Z[k].ac + '"></i>' + SS_Z[k].l + '</span>'; }).join('') + '</div>';
-  var tot = 0; Object.keys(cells).forEach(function(k) { if (k !== '_bar') tot += cells[k].fol; });
+  var tot = 0; Object.keys(cells).forEach(function(k) { if (k.charAt(0) !== '_') tot += cells[k].fol; });
   h += '<div class="pa-note"><b>Come our way</b> = share of past movers of this type who landed at a ' + mins + ' programme. <b>Regulars</b> = share of those who then played 800+ minutes in a season there. ' +
     '<b>Project as starters</b> = players in today\'s portal whose projected rating at ' + (home.short_name || 'your team') + ' is at least that of its median regular (' + (ssZones._bar || 0).toFixed(1) + '). ' +
     'Based on ' + tot.toLocaleString() + ' transfers followed from the 2022-23 to 2025-26 portal cycles. Tap a box to see those players on the chart.</div>';
@@ -2139,6 +2176,7 @@ function clearFilters() {
   document.getElementById('fEmail').value = '';
   document.getElementById('fAward').value = '';
   document.getElementById('fTeam').value   = '';
+  document.getElementById('fFit').value    = '';
   document.getElementById('fSearch').value = '';
   ratingSel = {}; buildRatingPanel();
   sortKey = 'composite_adj'; sortDir = -1;
@@ -2157,6 +2195,7 @@ function filteredPlayers() {
   var emailF = document.getElementById('fEmail').value;
   var awardF = document.getElementById('fAward').value;
   var teamF  = document.getElementById('fTeam').value;
+  var fitF   = document.getElementById('fFit').value;
   var q      = document.getElementById('fSearch').value.toLowerCase().trim();
 
   return allPlayers.filter(function(p) {
@@ -2186,6 +2225,7 @@ function filteredPlayers() {
       if (emailF === 'recent' && !ei.recent) return false;
     }
     if (teamF && String(p.team_id) !== teamF) return false;
+    if (fitF) { var _fz = ssFitOf(p.unified_id); if (fitF === 'sweetsel' ? (_fz !== 'sweet' && _fz !== 'sel') : _fz !== fitF) return false; }
     if (q) {
       var hay = (p._name + ' ' + ((t && t.name) || '') + ' ' + ((t && t.short_name) || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -2280,7 +2320,7 @@ function renderPlayers() {
   }).join('') + '</tr>';
 
   // The 400 cap silently hid most of the portal (1,300+ entries) — Nov 25, 2026. A focused filter lifts it.
-  var MAX = (document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value || Object.keys(ratingSel).length) ? 5000 : 400;
+  var MAX = (document.getElementById('fFit').value || document.getElementById('fXfer').value || document.getElementById('fEmail').value || document.getElementById('fAward').value || Object.keys(ratingSel).length) ? 5000 : 400;
   var body = rows.slice(0, MAX).map(function(p) {
     var t = teamsById[p.team_id] || {};
     var tierCls = t.tier ? 'tier-' + t.tier.split(' ')[0] : '';
@@ -2303,6 +2343,7 @@ function renderPlayers() {
              ? '<span class="xfer-tag xfer-active" title="In the transfer portal now">PORTAL</span>' : '') +
           (p.transfer_history === 'transferred'
              ? '<span class="xfer-tag xfer-prev" title="Has transferred at least once before">XFER</span>' : '') +
+          ssFitTag(p) +
           '<div class="sub">' + sch + (cf ? ' · ' + cf : '') + '</div></td>';
       }
       if (c.k === 'composite_adj') {
@@ -2680,7 +2721,7 @@ function openPlayerDetail(unifiedId, season, teamId, roster) {
     '<div class="player-sub" style="margin-top:5px">' +
       '<span class="pos-tag">' + (pos || 'N/A') + '</span>' + ncaaTag(p.unified_id) +
       (p.listed_pos_raw ? '<span class="fit-note">Listed: ' + p.listed_pos_raw + '</span>' : '') +
-      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') +
+      (t.tier ? '<span class="tier-tag tier-' + t.tier.split(' ')[0] + '" style="margin-left:6px">' + t.tier + '</span>' : '') + ssFitTag(p, true) +
     '</div>' +
     profileFlag(p, roster) +
     '<div class="overall-score">' +

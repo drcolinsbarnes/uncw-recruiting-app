@@ -548,6 +548,7 @@ body.desk .ss-mt { font-size:11px; }
 .td-n .gy { font-weight:400; color:var(--muted); font-size:11px; margin-left:3px; }
 .td-r { font-size:12px; font-weight:700; color:var(--navy); text-align:right; font-variant-numeric:tabular-nums; }
 .td-p.starter .td-r { font-size:15px; }
+.td-r.co { text-decoration: underline dotted; text-underline-offset: 3px; }
 .td-r.hi { color:#0a7d55; } .td-r.lo { color:#8a6d00; } .td-r.none { color:#b8bec7; font-weight:400; }
 .td-s { grid-column:2 / 4; font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
 .td-tag { display:inline-block; font-size:9.5px; font-weight:700; border-radius:4px; padding:0 4px; margin-left:4px; vertical-align:1px; }
@@ -633,7 +634,7 @@ body.desk .td-pitch { flex:1; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.4</div>
+        <div class="sub">Women's Soccer · v4.5</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2775,7 +2776,7 @@ var TD_SLOTS = ['GK','LB','LCB','RCB','RB','DM','LAM','RAM','LW','CF','RW','OUT'
 var TD_GROUP = { GK:'GK', LB:'OB', RB:'OB', LCB:'CB', RCB:'CB', DM:'DM', LAM:'AM', RAM:'AM', LW:'WF', RW:'WF', CF:'CF', OUT:'OUT' };
 var TD_NEED = [ ['GK',1,'Goalkeeper'], ['CB',2,'Centre backs'], ['OB',2,'Outside backs'], ['DM',1,'Holding mid'], ['AM',2,'Attacking mids'], ['WF',2,'Wide forwards'], ['CF',1,'Centre forward'] ];
 var TD_PLAY = 75.7, TD_MED = 77.7;   // UNCW regulars (800+ min): lowest and median rating — same bars as the "At UNCW" read
-var tdRows = [], tdStats = {}, tdRate = {}, tdSeason = 2026, tdEditing = false, tdLoadedFor = null, tdMissing = false;
+var tdRows = [], tdStats = {}, tdRate = {}, tdRateB = {}, tdSeason = 2026, tdEditing = false, tdLoadedFor = null, tdMissing = false;
 
 function tdKey(uid, season) { return uid + '|FA' + season; }
 function tdSlug(n) { return (n || '').toLowerCase().normalize('NFD').replace(/[^a-z]/g, ''); }
@@ -2791,14 +2792,14 @@ function loadDepth() {
   Promise.all([depthP, statP, ptrP, bprP]).then(function(r) {
     if (tdLoadedFor !== token) return;
     tdMissing = !!(r[0].error);
-    var rows = r[0].data || [], st = {}, rt = {};
+    var rows = r[0].data || [], st = {}, rt = {}, rb = {};
     (r[1].data || []).forEach(function(x) {
       st[x.unified_id + '|' + x.season] = x;
       var sk = (x.stint_key || '').split('|')[1]; if (sk) st['name:' + sk + '|' + x.season] = x;
     });
-    (r[3].data || []).forEach(function(x) { if (x.rating != null) rt[x.unified_id + '|' + x.season] = { v: x.rating, basis: x.basis }; });
+    (r[3].data || []).forEach(function(x) { if (x.rating != null) rb[x.unified_id + '|' + x.season] = { v: x.rating, basis: x.basis }; });
     (r[2].data || []).forEach(function(x) { if (x.composite != null) rt[x.unified_id + '|' + x.season] = { v: x.composite, basis: x.rating_basis }; });
-    tdRows = rows; tdStats = st; tdRate = rt;
+    tdRows = rows; tdStats = st; tdRate = rt; tdRateB = rb;
     renderDepth();
   });
 }
@@ -2807,10 +2808,17 @@ function tdStat(p, season) {
   if (season > 2026) return null;
   return (p.unified_id && tdStats[tdKey(p.unified_id, season)]) || tdStats['name:' + tdSlug(p.player_name) + '|FA' + season] || null;
 }
+// Which number to show (Colin, Nov 26): a coach's own rating always wins. Otherwise the
+// box-score model for past seasons — the card composite for FA2024/FA2025 is still the old
+// Wyscout-stats rating (Vegoda 92, Fry 48) — and the card rating for 2026, which is the same
+// box-score model plus the low-minutes blend.
 function tdRating(p, season) {
-  var s = Math.min(season, 2026);
-  var x = p.unified_id && tdRate[tdKey(p.unified_id, s)];
-  return x || null;
+  var own = p.coach_rating;
+  if (own == null && season === TD_NEXT) { var src = tdFind(p.player_key, 2026); if (src) own = src.coach_rating; }
+  if (own != null) return { v: Number(own), basis: 'coach' };
+  if (!p.unified_id) return null;
+  var s = Math.min(season, 2026), k = tdKey(p.unified_id, s);
+  return (s < 2026 ? (tdRateB[k] || tdRate[k]) : (tdRate[k] || tdRateB[k])) || null;
 }
 
 // Effective status. 'returning' and 'graduating' are never trusted as stored —
@@ -2864,20 +2872,17 @@ function tdPlayerHtml(p, season, slot, i) {
   var cls = rv == null ? 'none' : (rv >= TD_MED ? 'hi' : (rv < TD_PLAY ? 'lo' : ''));
   var parts = (p.player_name || '').split(' ');
   var first = parts.shift(), last = parts.join(' ');
+  // Played seasons show what happened, untouched (Colin, Nov 26): no tags, no strike-through.
+  // Who leaves is shown on the next-season tab only.
   var tag = '';
-  if (season <= 2026) {
-    if (st === 'portal') tag = '<span class="td-tag portal">portal</span>';
-    else if (st === 'leaving') tag = '<span class="td-tag leaving">leaving</span>';
-    else if (st === 'graduating' && season === 2026) tag = '<span class="td-tag grad">grad</span>';
-  }
-  if (st === 'incoming') tag = '<span class="td-tag new">new</span>';
-  if (st === 'redshirt') tag = '<span class="td-tag rs">RS</span>';
-  var gone = season === 2026 && tdLeaves(p, 2026);
+  if (season === TD_NEXT && st === 'incoming') tag = '<span class="td-tag new">new</span>';
+  if (season === TD_NEXT && st === 'redshirt') tag = '<span class="td-tag rs">RS</span>';
+  var gone = false;
   var gy = p.grad_year ? "'" + String(p.grad_year).slice(-2) : '';
   return '<div class="td-p ' + (i === 0 ? 'starter' : 'reserve') + (gone ? ' gone' : '') + '" onclick="tdClick(' + "'" + encodeURIComponent(p.player_key) + "'," + (p._from2026 ? 2026 : p.season) + ')" title="' + (p.player_name || '') + (p.note ? ' — ' + p.note.replace(/"/g, '') : '') + '">' +
     '<div class="td-j">' + (p.jersey != null && p.jersey !== '' ? p.jersey : '') + '</div>' +
     '<div class="td-n"><span class="fn">' + first + ' </span><span class="fi">' + (first || '').charAt(0) + '. </span>' + last + '<span class="gy">' + gy + '</span>' + tag + '</div>' +
-    '<div class="td-r ' + cls + '">' + (rv != null ? rv : '—') + '</div>' +
+    '<div class="td-r ' + cls + (r && r.basis === 'coach' ? ' co" title="Coach rating' : '') + '">' + (rv != null ? rv : '—') + '</div>' +
     '<div class="td-s">' + tdStatLine(p, season, slot) + '</div></div>';
 }
 
@@ -2912,7 +2917,6 @@ function renderDepth() {
   } else {
     var mins = rows.reduce(function(a, r) { var x = tdStat(r, season); return a + (x ? x.minutes || 0 : 0); }, 0);
     meta = rows.length + ' players · ' + mins.toLocaleString() + ' minutes on record';
-    if (season === 2026) meta += ' · ' + rows.filter(function(r) { return tdLeaves(r, 2026); }).length + ' not back in 2027';
   }
   if (tdEditing) meta = 'Tap a player to change position, depth, grad year or status';
   document.getElementById('tdMeta').textContent = meta;
@@ -2930,8 +2934,7 @@ function renderDepth() {
     '<div class="td-row gk">' + tdSlotHtml('GK', bySlot, season) + '</div></div>';
 
   var side = '';
-  if (season === TD_NEXT) side = tdNeedsHtml();
-  else if (season === 2026) side = tdLeavingHtml();
+  if (season === TD_NEXT) side = tdNeedsHtml() + tdLeavingHtml();
   var outs = bySlot.OUT || [];
   if (outs.length) side += '<div class="td-panel"><h3>Not in the 4-3-3</h3><p class="hint">Injured, redshirting or not placed yet.</p><div class="td-card">' +
     tdSorted(outs, season).map(function(p, i) { return tdPlayerHtml(p, season, 'OUT', 1); }).join('') + '</div></div>';
@@ -2945,7 +2948,7 @@ function tdLeavingHtml() {
   var tot = 0, lost = 0;
   rows.forEach(function(r) { var x = tdStat(r, 2026); if (x) { tot += x.minutes || 0; if (tdLeaves(r, 2026)) lost += x.minutes || 0; } });
   var lbl = { portal: 'portal', leaving: 'leaving', graduating: 'graduating' };
-  return '<div class="td-panel"><h3>Not back in 2027</h3><p class="hint">' + gone.length + ' players, ' +
+  return '<div class="td-panel"><h3>Leaving after 2026</h3><p class="hint">' + gone.length + ' players, ' +
     (tot ? Math.round(100 * lost / tot) : 0) + '% of 2026 minutes. Wrong? Turn on Edit and fix the grad year or status.</p>' +
     gone.sort(function(a, b) { var x = tdStat(a, 2026), y = tdStat(b, 2026); return (y ? y.minutes : 0) - (x ? x.minutes : 0); })
       .map(function(r) { var x = tdStat(r, 2026), rt = tdRating(r, 2026);
@@ -3017,6 +3020,7 @@ function tdEdit(key, srcSeason) {
     '<div><label>Depth (1 = starter)</label><input id="tdDepth" type="number" min="1" max="9" value="' + (p.depth || 1) + '"></div></div>' +
     '<div class="two"><div><label>Grad year</label><input id="tdGrad" type="number" min="2024" max="2035" value="' + (p.grad_year || '') + '"></div>' +
     '<div><label>Jersey</label><input id="tdJersey" value="' + (p.jersey || '') + '"></div></div>' +
+    '<label>Our rating (0-100, blank = model' + (function() { var m = tdRating(Object.assign({}, p, { coach_rating: null }), season); return m ? ': ' + Math.round(m.v) : ''; })() + ')</label><input id="tdRate" type="number" min="0" max="100" step="0.5" value="' + (p.coach_rating != null ? p.coach_rating : '') + '">' +
     '<label>Status</label><select id="tdStatus">' + opt('', 'From grad year (returning / graduating)', st) + opt('portal', 'In the portal', st) + opt('leaving', 'Leaving / not returning', st) +
       opt('redshirt', 'Redshirt', st) + opt('incoming', 'Incoming', st) + '</select>' +
     '<label>Note</label><input id="tdNote" value="' + (p.note || '').replace(/"/g, '&quot;') + '">' +
@@ -3036,6 +3040,10 @@ function tdEdit(key, srcSeason) {
       note: document.getElementById('tdNote').value.trim() || null,
       updated_by: (window.currentUserEmail || null)
     };
+    // Only send coach_rating when there is one to set or clear, so saving still works
+    // before 2026-11-27_team_depth_coach_rating.sql has been run.
+    var cr = parseFloat(document.getElementById('tdRate').value);
+    if (!isNaN(cr)) row.coach_rating = cr; else if (p.coach_rating != null) row.coach_rating = null;
     this.disabled = true; this.textContent = 'Saving…';
     var btn = this;
     recruitSupa.from('team_depth').upsert(row, { onConflict: 'school_id,season,player_key' }).then(function(res) {

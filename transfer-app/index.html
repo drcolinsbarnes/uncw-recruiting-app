@@ -653,6 +653,15 @@ body.desk .td-pitch { flex:1; }
 .tp-more { display:flex; gap:12px; padding:7px 9px; background:#fafbfc; border-top:1px solid #f0f2f5; }
 .tp-more button { border:0; background:transparent; color:#1d4ed8; font-size:11.5px; font-weight:700; cursor:pointer; padding:0; }
 body.desk .td-side { width:400px; max-width:400px; }
+
+.sl-ghead td { background:#f1f4f8; font-size:12px; color:#374151; padding:9px 10px !important; border-top:2px solid #dfe4ea; }
+.sl-ghead.want td { background:#eaf2ff; border-top-color:#93c5fd; }
+.sl-cnt { float:right; color:var(--muted); font-size:11px; }
+.sl-unconf { font-size:10px; font-weight:700; color:#8a5a00; background:#fff1cc; border-radius:4px; padding:1px 5px; margin-left:4px; }
+.sl-none td { font-size:12px; color:var(--muted); padding:8px 10px !important; }
+.sl-tog { margin-left:10px; display:inline-flex; gap:3px; }
+.sl-tog button { border:1px solid var(--border); background:#fff; border-radius:12px; padding:1px 8px; font-size:11px; cursor:pointer; }
+.sl-tog button.on { background:var(--navy); color:#fff; border-color:var(--navy); }
 </style>
 </head>
 <body>
@@ -673,7 +682,7 @@ body.desk .td-side { width:400px; max-width:400px; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.7</div>
+        <div class="sub">Women's Soccer · v4.8</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -1459,14 +1468,61 @@ function interestTable(rows, headEl, bodyEl, barEl, extraHead, extraCell, empty)
       empty + '</td></tr>';
 }
 
+// Shortlist grouped by the 2027 plan (Colin, Nov 26): positions the staff are adding to come first,
+// in the same order as the Team tab's plan, each headed with how many we want, how many are
+// pencilled in and whether the plan is confirmed. Falls back to one flat list before the depth
+// chart has loaded, or when the coach switches grouping off.
+var slGroup = true;
+function slGroupOf(p, A) {
+  var gs = (typeof TD_POS_GRP !== 'undefined' && TD_POS_GRP[p.primary_pos]) || [];
+  if (!gs.length) return '?';
+  if (gs.length > 1 && A) return gs.slice().sort(function(a, b) { return (A[b] ? A[b].add : 0) - (A[a] ? A[a].add : 0); })[0];
+  return gs[0];
+}
 function renderShortlist() {
-  var rows = interestRows(function(i) { return i.is_shortlisted; })
-    .sort(function(a, b) { return (b.p.composite_adj || 0) - (a.p.composite_adj || 0); });
-  interestTable(rows, 'shortHead', 'shortBody', 'shortResultsBar',
-    '<th>Visit</th><th>Level</th>',
-    function(x) { return '<td>' + (x.i.visit_date || '—') + '</td><td>' +
-      ((teamsById[x.p.team_id] || {}).tier || '—') + '</td>'; },
+  var rows = interestRows(function(i) { return i.is_shortlisted; });
+  var key = function(x) { var r = ssRole(x.p); return r && r.adj != null ? r.adj : (x.p.composite_adj || 0) - 12; };
+  rows.sort(function(a, b) { return key(b) - key(a); });
+  var A = (typeof tdAnalyse === 'function' && tdRows && tdRows.length) ? tdAnalyse() : null;
+  var pencil = {}; (tdRows || []).forEach(function(r) { if (r.season === TD_NEXT && r.status === 'target') pencil[r.unified_id] = 1; });
+  var cell = function(x) {
+    return '<td>' + (x.p.team_id === HOME_TEAM_ID ? '—' : ssRolePill(x.p)) + (pencil[x.p.unified_id] ? ' <span class="td-tag tgt">pencilled</span>' : '') + '</td>' +
+      '<td>' + (x.i.visit_date || '—') + '</td><td>' + ((teamsById[x.p.team_id] || {}).tier || '—') + '</td>';
+  };
+  interestTable(rows, 'shortHead', 'shortBody', 'shortResultsBar', '<th>At UNCW</th><th>Visit</th><th>Level</th>', cell,
     'No one shortlisted yet — open a player and press ☆ Add to shortlist.');
+  var bar = document.getElementById('shortResultsBar');
+  bar.innerHTML = rows.length + ' players' + (A ? ' <span class="sl-tog"><button class="' + (slGroup ? 'on' : '') + '" onclick="slGroup=true;renderShortlist()">By 2027 need</button><button class="' + (!slGroup ? 'on' : '') + '" onclick="slGroup=false;renderShortlist()">One list</button></span>' : '');
+  if (!A || !slGroup || !rows.length) return;
+  var by = {}; rows.forEach(function(x) { var g = slGroupOf(x.p, A); (by[g] = by[g] || []).push(x); });
+  var order = { red: 0, amber: 1, green: 2 };
+  var gs = TD_NEED.map(function(n) { return n[0]; }).sort(function(a, b) {
+    return (A[b].add > 0) - (A[a].add > 0) || order[A[a].flag] - order[A[b].flag];
+  }).concat(['?']);
+  var confirmed = TD_NEED.every(function(n) { return A[n[0]].confirmed; });
+  var html = '';
+  gs.forEach(function(g) {
+    var list = by[g]; var x = A[g];
+    if (!list && !(x && x.add > 0)) return;
+    var head;
+    if (g === '?') head = '<b>Position unknown</b>';
+    else {
+      var left = x.add - x.targets.length;
+      head = '<b>' + g + '</b> · ' + x.label + ' — ' + (x.add > 0
+        ? 'adding <b>' + x.add + '</b>' + (x.targets.length ? ', ' + x.targets.length + ' pencilled in' : '') + (left > 0 ? ', <b>' + left + ' still open</b>' : ', filled')
+        : 'not in the plan') + (x.add > 0 && !confirmed ? ' <span class="sl-unconf">plan not confirmed</span>' : '');
+    }
+    html += '<tr class="sl-ghead' + (x && x.add > 0 ? ' want' : '') + '"><td colspan="6">' + head + '<span class="sl-cnt">' + (list ? list.length : 0) + ' shortlisted</span></td></tr>';
+    if (!list) { html += '<tr class="sl-none"><td colspan="6">Nobody shortlisted here yet. <a href="#" onclick="tdSeason=TD_NEXT;tdOpen[\'' + g + '\']=true;showScreen(\'Team\');renderDepth();return false">See portal options on the Team tab</a></td></tr>'; return; }
+    html += list.map(function(x) {
+      var t = teamsById[x.p.team_id] || {};
+      return '<tr onclick="openPlayerDetail(\'' + x.p.unified_id + '\',\'' + x.p.season + '\',' + (x.p.team_id || 'null') + ')">' +
+        '<td class="col-name"><b>' + x.p._name + '</b><div class="sub">' + (t.short_name || t.name || '—') + (t.conference_short ? ' · ' + t.conference_short : '') + '</div></td>' +
+        '<td class="col-rating rating">' + (x.p.composite_adj == null ? '—' : Math.round(x.p.composite_adj)) + '</td>' +
+        '<td>' + (x.p.primary_pos || 'N/A') + '</td>' + cell(x) + '</tr>';
+    }).join('');
+  });
+  document.getElementById('shortBody').innerHTML = html;
 }
 
 function renderVisits() {
@@ -2846,6 +2902,7 @@ function loadDepth() {
     (r[3].data || []).forEach(function(x) { if (x.rating != null) rb[x.unified_id + '|' + x.season] = { v: x.rating, basis: x.basis }; });
     (r[2].data || []).forEach(function(x) { if (x.composite != null) rt[x.unified_id + '|' + x.season] = { v: x.composite, basis: x.rating_basis }; });
     tdRows = rows; tdStats = st; tdRate = rt; tdRateB = rb;
+    if (document.getElementById('screenShortlist').classList.contains('active')) renderShortlist();
     renderDepth();
   });
 }

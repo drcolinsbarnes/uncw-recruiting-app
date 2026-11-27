@@ -614,6 +614,45 @@ body.desk .td-pitch { flex:1; }
   .td-row.back .td-p.starter .td-s { display:none; }
 }
 @media (prefers-reduced-motion: no-preference) { .td-p { transition: background .12s; } }
+
+.td-p.tgt { background:#f3f8ff; outline:1.5px dashed #3b82f6; outline-offset:-2px; }
+.td-tag.tgt { background:#dbeafe; color:#1d4ed8; }
+.td-ghost { padding:7px; font-size:11px; font-weight:700; color:#1d4ed8; text-align:center; border-top:1px dashed #93c5fd; background:#f5f9ff; cursor:pointer; }
+.td-card > .td-ghost:first-child { border-top:0; }
+.td-ghost:hover { background:#e8f1ff; }
+.td-plan .tp-sum { display:flex; align-items:center; justify-content:space-between; gap:8px; background:#f5f7fa; border-radius:9px; padding:8px 10px; margin:6px 0 8px; font-size:13px; }
+.tp-confirm { background:var(--navy); color:#fff; border:0; border-radius:7px; padding:6px 10px; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
+.tp-ok { color:#11703f; font-weight:700; font-size:12px; white-space:nowrap; }
+.tp-g { border-top:1px solid #eef0f3; padding:2px 0 8px; }
+.tp-g .td-need { border-top:0; }
+.tp-g.want .g { color:#1d4ed8; }
+.tp-row { display:flex; align-items:center; gap:6px; font-size:12px; margin-left:44px; flex-wrap:wrap; }
+.tp-lbl { color:var(--muted); font-weight:700; font-size:11px; }
+.tp-step { width:26px; height:26px; border-radius:7px; border:1px solid var(--border); background:#fff; font-size:15px; font-weight:700; color:var(--navy); cursor:pointer; line-height:1; }
+.tp-step:disabled { opacity:.35; cursor:default; }
+.tp-n { min-width:16px; text-align:center; font-weight:800; font-size:14px; }
+.tp-sug { color:var(--muted); font-size:11px; flex:1; }
+.tp-open { border:0; background:transparent; color:#1d4ed8; font-weight:700; font-size:12px; cursor:pointer; padding:4px 0; }
+.tp-rank { margin:8px 0 0 44px; font-size:11px; color:var(--muted); display:flex; gap:4px; align-items:center; }
+.tp-rank button { border:1px solid var(--border); background:#fff; border-radius:12px; padding:2px 8px; font-size:11px; cursor:pointer; color:var(--text); }
+.tp-rank button.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+.tp-list { margin:6px 0 0 0; border:1px solid #e5e9f0; border-radius:10px; overflow:hidden; }
+.td-cand { display:grid; grid-template-columns:1fr auto auto; gap:6px; align-items:center; padding:8px 9px; border-top:1px solid #f0f2f5; }
+.td-cand:first-child { border-top:0; }
+.td-cand.in { background:#f3f8ff; }
+.tc-main { cursor:pointer; min-width:0; }
+.tc-name { font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tc-sub { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tc-why { font-size:11px; color:#374151; margin-top:3px; line-height:1.5; }
+.tc-r { font-weight:800; font-size:15px; color:var(--navy); font-variant-numeric:tabular-nums; }
+.tc-act { display:flex; flex-direction:column; gap:4px; align-items:stretch; }
+.tc-sl { border:1px solid var(--border); background:#fff; border-radius:6px; font-size:13px; cursor:pointer; padding:2px 0; color:#b45309; }
+.tc-sl.on { background:#fef3c7; border-color:#f59e0b; }
+.tc-pin { border:1px solid #3b82f6; background:#fff; color:#1d4ed8; border-radius:6px; font-size:11px; font-weight:700; padding:4px 6px; cursor:pointer; white-space:nowrap; }
+.td-cand.in .tc-pin { background:#1d4ed8; color:#fff; }
+.tp-more { display:flex; gap:12px; padding:7px 9px; background:#fafbfc; border-top:1px solid #f0f2f5; }
+.tp-more button { border:0; background:transparent; color:#1d4ed8; font-size:11.5px; font-weight:700; cursor:pointer; padding:0; }
+body.desk .td-side { width:400px; max-width:400px; }
 </style>
 </head>
 <body>
@@ -634,7 +673,7 @@ body.desk .td-pitch { flex:1; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.6</div>
+        <div class="sub">Women's Soccer · v4.7</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -1343,6 +1382,7 @@ function attachNames() {
       renderPlayers();
       ssZones = null; ssRefsCache = null; ssCurCache = null; ssLoad();
       loadTeamRatings();
+      tdRefresh();
       loadInterest();
       loadEmailInterest();
       loadPortalInfo();
@@ -1586,6 +1626,7 @@ function addPortalStubs(done) {
           pool[key] = true;
         });
         activePool = pool;
+        tdPortal = {}; acc.forEach(function(x) { if (x.season === cyc && x.unified_id) tdPortal[x.unified_id] = x; });
         done();
       });
   }
@@ -1839,7 +1880,7 @@ function ssLoad() {
       .range(off, off + 999).then(function(r) {
         var d = (r && r.data) || []; acc = acc.concat(d);
         if (d.length === 1000) { page(off + 1000); return; }
-        ssMoves = acc; ssLoading = false; ssZones = null;
+        ssMoves = acc; ssLoading = false; ssZones = null; tdRefresh();
         if (paView === 'sweet' || (paView === 'players' && paP.color === 'zone')) paRender();
         if (typeof renderPlayers === 'function') renderPlayers();
       }, function() { ssMoves = []; ssLoading = false; if (paView === 'sweet') paRender(); });
@@ -1922,9 +1963,11 @@ function ssFitTag(p, big) {
 // Compared with the home team's own regulars (800+ min this season): >= its best = one of our best, >= its median = would
 // start, >= its lowest = would play, below = depth.
 var SS_ROLE = {
-  best:     { l: 'One of our best', fg: '#065f46', bg: '#bbf7d0', o: 4 },
-  start:    { l: 'Would start',     fg: '#065f46', bg: '#dcfce7', o: 3 },
-  play:     { l: 'Would play',      fg: '#92400e', bg: '#fef3c7', o: 2 },
+  // 'Could', never 'would' (Colin, Nov 26): these are reads off a rating, not a scouting verdict. Not all goals are
+  // equal, and only watching her play says whether the number is right.
+  best:     { l: 'Could be one of our best', fg: '#065f46', bg: '#bbf7d0', o: 4 },
+  start:    { l: 'Could start',     fg: '#065f46', bg: '#dcfce7', o: 3 },
+  play:     { l: 'Could play',      fg: '#92400e', bg: '#fef3c7', o: 2 },
   depth:    { l: 'Depth',           fg: '#475569', bg: '#f1f5f9', o: 1 },
   unproven: { l: 'Unproven',        fg: '#6b21a8', bg: '#f3e8ff', o: 0 }
 };
@@ -1979,6 +2022,7 @@ function ssRoleBlock(p) {
         (r.down ? ' Part-time players lose about 4 per tier moving down, so about <b>' + r.adj.toFixed(1) + '</b> here.' : '')) +
       ' ' + home + '\'s regulars run ' + R.low.toFixed(1) + '–' + R.best.toFixed(1) + ' (median ' + R.med.toFixed(1) + ').';
   }
+  if (r.k !== 'unproven') body += ' <span style="color:#6b7280">A read from her rating only: watch her play to judge it.</span>';
   return '<div class="pt-block"><div class="pt-head">At ' + home + '<span class="pt-role" style="color:' + Z.fg + ';background:' + Z.bg + '">' + Z.l + '</span></div>' +
     '<div class="pt-body">' + body + '</div></div>';
 }
@@ -2010,7 +2054,7 @@ function paSweet(pool) {
       h += '<button class="ss-cell" style="background:' + z.bg + ';color:' + z.fg + (c.zone === 'unk' ? ';border:1px dashed #a8a29e' : '') + '" onclick="ssOpenCell(\'' + t + '\',\'' + b + '\')">' +
         '<div class="ss-dots">' + dots + '</div><div class="ss-z">' + z.l + '</div>' +
         meter('Come our way', c.I, z.ac) + meter('Regulars', c.K, z.ac) +
-        '<div class="ss-pool">' + c.pool + ' in portal now' + (c.G != null ? ' · <b>' + c.good + '</b> would start' : '') + '</div></button>';
+        '<div class="ss-pool">' + c.pool + ' in portal now' + (c.G != null ? ' · <b>' + c.good + '</b> could start' : '') + '</div></button>';
     });
   });
   h += '</div>';
@@ -2018,7 +2062,7 @@ function paSweet(pool) {
     return '<span><i style="background:' + SS_Z[k].bg + ';border:1px solid ' + SS_Z[k].ac + '"></i>' + SS_Z[k].l + '</span>'; }).join('') + '</div>';
   var tot = 0; Object.keys(cells).forEach(function(k) { if (k.charAt(0) !== '_') tot += cells[k].fol; });
   h += '<div class="pa-note"><b>Come our way</b> = share of past movers of this type who landed at a ' + mins + ' programme. <b>Regulars</b> = share of those who then played 800+ minutes in a season there. ' +
-    '<b>Would start</b> = portal players whose rating (proven players as is, part-time players minus 4 per tier moving down) is at least ' + (home.short_name || 'your team') + '\'s median regular (' + ssRefs().med.toFixed(1) + '). ' +
+    '<b>Could start</b> = portal players whose rating (proven players as is, part-time players minus 4 per tier moving down) is at least ' + (home.short_name || 'your team') + '\'s median regular (' + ssRefs().med.toFixed(1) + '). ' +
     'Based on ' + tot.toLocaleString() + ' transfers followed from the 2022-23 to 2025-26 portal cycles. Tap a box to see those players on the chart.</div>';
   // home team's own transfers in
   var regs = ins.filter(function(m) { return (m.to_best_minutes || 0) >= 800; }).length;
@@ -2789,8 +2833,10 @@ function loadDepth() {
   var statP = careerSupa ? careerSupa.from('boxscore_season_stats').select('unified_id,season,gp,starts,minutes,goals,assists,shots,sog,gk_minutes,saves,goals_against,stint_key').eq('team_id', 2403).in('season', seasons) : Promise.resolve({data:[]});
   var ptrP  = careerSupa ? careerSupa.from('player_transfer_ratings').select('unified_id,season,composite,rating_basis,minutes').eq('team_id', 2403).in('season', seasons) : Promise.resolve({data:[]});
   var bprP  = careerSupa ? careerSupa.from('boxscore_player_ratings').select('unified_id,season,rating,basis').eq('team_id', 2403).in('season', seasons) : Promise.resolve({data:[]});
-  Promise.all([depthP, statP, ptrP, bprP]).then(function(r) {
+  var needsP = recruitSupa.from('team_needs').select('*').eq('school_id', UNCW_SCHOOL_ID).eq('season', TD_NEXT);
+  Promise.all([depthP, statP, ptrP, bprP, needsP]).then(function(r) {
     if (tdLoadedFor !== token) return;
+    tdNeedsMissing = !!(r[4].error); var nd = {}; (r[4].data || []).forEach(function(x) { nd[x.pos_group] = x; }); tdNeeds = nd;
     tdMissing = !!(r[0].error);
     var rows = r[0].data || [], st = {}, rt = {}, rb = {};
     (r[1].data || []).forEach(function(x) {
@@ -2817,6 +2863,7 @@ function tdRating(p, season) {
   if (own == null && season === TD_NEXT) { var src = tdFind(p.player_key, 2026); if (src) own = src.coach_rating; }
   if (own != null) return { v: Number(own), basis: 'coach' };
   if (!p.unified_id) return null;
+  if (p.status === 'target') { var tr = ssRole({ unified_id: p.unified_id }); return tr && tr.adj != null ? { v: tr.adj, basis: 'portal' } : null; }
   var s = Math.min(season, 2026), k = tdKey(p.unified_id, s);
   return (s < 2026 ? (tdRateB[k] || tdRate[k]) : (tdRate[k] || tdRateB[k])) || null;
 }
@@ -2824,7 +2871,7 @@ function tdRating(p, season) {
 // Effective status. 'returning' and 'graduating' are never trusted as stored —
 // they follow the grad year, so a coach fixing a grad year fixes the analysis.
 function tdStatus(p, season) {
-  if (p.status === 'portal' || p.status === 'leaving' || p.status === 'incoming' || p.status === 'redshirt') return p.status;
+  if (p.status === 'portal' || p.status === 'leaving' || p.status === 'incoming' || p.status === 'redshirt' || p.status === 'target') return p.status;
   if (p.grad_year && p.grad_year <= season + 1) return 'graduating';
   return 'returning';
 }
@@ -2857,6 +2904,7 @@ function tdStatLine(p, season, slot) {
     if (season === TD_NEXT) {
       var y = tdStats[tdKey(p.unified_id, 2026)] || tdStats['name:' + tdSlug(p.player_name) + '|FA2026'];
       if (y) return "'26: " + (y.minutes || 0).toLocaleString() + "′";
+      if (p.status === 'target') { var tc = ssCur(p.unified_id); return tc ? "'26: " + Math.round(tc.minutes || 0).toLocaleString() + "′ at " + ((teamsById[tc.team_id] || {}).short_name || '') : 'Portal'; }
       return p.status === 'incoming' ? (p.note && p.note.indexOf('Committed') === 0 ? 'Incoming freshman' : 'Incoming') : '';
     }
     return 'No minutes';
@@ -2880,9 +2928,10 @@ function tdPlayerHtml(p, season, slot, i) {
   var tag = '';
   if (season === TD_NEXT && st === 'incoming') tag = '<span class="td-tag new">new</span>';
   if (season === TD_NEXT && st === 'redshirt') tag = '<span class="td-tag rs">RS</span>';
+  if (season === TD_NEXT && st === 'target') tag = '<span class="td-tag tgt">target</span>';
   var gone = false;
   var gy = p.grad_year ? "'" + String(p.grad_year).slice(-2) : '';
-  return '<div class="td-p ' + (i === 0 ? 'starter' : 'reserve') + (gone ? ' gone' : '') + '" onclick="tdClick(' + "'" + encodeURIComponent(p.player_key) + "'," + (p._from2026 ? 2026 : p.season) + ')" title="' + (p.player_name || '') + (p.note ? ' — ' + p.note.replace(/"/g, '') : '') + '">' +
+  return '<div class="td-p ' + (i === 0 ? 'starter' : 'reserve') + (gone ? ' gone' : '') + (st === 'target' ? ' tgt' : '') + '" onclick="tdClick(' + "'" + encodeURIComponent(p.player_key) + "'," + (p._from2026 ? 2026 : p.season) + ')" title="' + (p.player_name || '') + (p.note ? ' — ' + p.note.replace(/"/g, '') : '') + '">' +
     '<div class="td-j">' + (p.jersey != null && p.jersey !== '' ? p.jersey : '') + '</div>' +
     '<div class="td-n"><span class="fn">' + first + ' </span><span class="fi">' + (first || '').charAt(0) + '. </span>' + last + '<span class="gy">' + gy + '</span>' + tag + '</div>' +
     '<div class="td-r ' + cls + (r && r.basis === 'coach' ? ' co" title="Coach rating' : '') + '">' + (rv != null ? rv : '—') + '</div>' +
@@ -2891,8 +2940,10 @@ function tdPlayerHtml(p, season, slot, i) {
 
 function tdSlotHtml(slot, bySlot, season, extraCls) {
   var list = tdSorted(bySlot[slot] || [], season);
-  var body = list.length ? list.map(function(p, i) { return tdPlayerHtml(p, season, slot, i); }).join('')
-                         : '<div class="td-empty">Nobody</div>';
+  var ghost = season === TD_NEXT ? (tdGhosts[slot] || 0) : 0;
+  var body = list.map(function(p, i) { return tdPlayerHtml(p, season, slot, i); }).join('');
+  if (ghost) body += '<div class="td-ghost" onclick="tdOpenGroup(\'' + TD_GROUP[slot] + '\')">+ Portal options for ' + slot + '</div>';
+  if (!body) body = '<div class="td-empty">Nobody</div>';
   return '<div class="td-slot ' + (extraCls || '') + '"><div class="td-slot-lbl">' + slot + '</div><div class="td-card">' + body + '</div></div>';
 }
 
@@ -2909,6 +2960,7 @@ function renderDepth() {
     return;
   }
   var season = tdSeason, rows = tdRowsFor(season);
+  if (season === TD_NEXT) tdPlanGhosts(rows);
   var bySlot = {};
   rows.forEach(function(r) { var s = r.slot || 'OUT'; (bySlot[s] = bySlot[s] || []).push(r); });
 
@@ -2959,37 +3011,207 @@ function tdLeavingHtml() {
           lbl[tdStatus(r, 2026)] + ' · ' + (x ? (x.minutes || 0).toLocaleString() + "′" : '0′') + (rt ? ' · ' + Math.round(rt.v) : '') + '</span></div>'; }).join('') + '</div>';
 }
 
-// 2027 needs. Per position group: share of 2026 minutes coming back, and how many
-// returners are proven at a level that plays at UNCW (300+ minutes and a rating at
-// least that of our lowest regular). Incoming freshmen are listed, never counted as proven.
-function tdNeedsHtml() {
-  var r26 = tdRowsFor(2026), r27 = tdRowsFor(TD_NEXT);
-  var html = '<div class="td-panel"><h3>2027 needs</h3><p class="hint">Bar = share of 2026 minutes in that position that return. Proven = 300+ minutes and rated ' + TD_PLAY + '+ (our lowest regular). Change a grad year with Edit and this updates.</p>';
-  var order = { red: 0, amber: 1, green: 2 }, items = [];
+// ══ 2027 needs, the coach's plan, and portal options (Nov 26, 2026, Colin) ══════════════
+// The analysis (minutes returning, proven returners) SUGGESTS how many to add at each position.
+// The staff set the real number with the steppers and confirm the plan (team_needs). Under
+// each position the best active portal players for it are listed; "Pencil in" puts one on the
+// 2027 pitch as a target (team_depth, status 'target') and the analysis recounts with her in.
+// Every read here comes from ratings only: "Could start", never "would" — the coach's film decides.
+var tdNeeds = {}, tdNeedsMissing = false, tdOpen = {}, tdMore = {}, tdPortal = {}, tdGhosts = {}, tdShowUnproven = {};
+var TD_GRP_SLOTS = { GK: ['GK'], CB: ['LCB','RCB'], OB: ['LB','RB'], DM: ['DM'], AM: ['LAM','RAM'], WF: ['LW','RW'], CF: ['CF'] };
+var TD_POS_GRP = { GK: ['GK'], CB: ['CB'], OB: ['OB'], DM: ['DM'], CM: ['DM','AM'], AM: ['AM'], WF: ['WF'], CF: ['CF'] };
+// 'Best fit' ranking leans on the Sweet spot (would she come AND be good enough here) as much as on the rating;
+// 'Highest rated' is the plain rating read. A P4 star who will not look at us is no use at the top of a list.
+var TD_FIT_PTS = { sweet: 6, sel: 3, upside: 1, come: 1, reach: -4, no: -10 };
+var tdRank = {};
+
+function tdRefresh() { var el = document.getElementById('screenTeam'); if (el && el.classList.contains('active') && tdRows.length) renderDepth(); }
+
+// Per position: what 2027 looks like now (returners + incoming + targets) and what the analysis suggests.
+function tdAnalyse() {
+  var r26 = tdRowsFor(2026), r27 = tdRowsFor(TD_NEXT), out = {};
   TD_NEED.forEach(function(n) {
     var g = n[0], need = n[1];
-    var all = r26.filter(function(r) { return TD_GROUP[r.slot || 'OUT'] === g; });
     var tot = 0, back = 0;
-    all.forEach(function(r) { var x = tdStat(r, 2026); var m = x ? x.minutes || 0 : 0; if (g === 'GK' && x) m = x.gk_minutes || m; tot += m; if (!tdLeaves(r, 2026)) back += m; });
+    r26.filter(function(r) { return TD_GROUP[r.slot || 'OUT'] === g; }).forEach(function(r) {
+      var x = tdStat(r, 2026); var m = x ? x.minutes || 0 : 0; if (g === 'GK' && x) m = x.gk_minutes || m;
+      tot += m; if (!tdLeaves(r, 2026)) back += m;
+    });
     var here = r27.filter(function(r) { return TD_GROUP[r.slot || 'OUT'] === g; });
-    var proven = here.filter(function(r) { var x = tdStats[tdKey(r.unified_id, 2026)]; var rt = tdRating(r, 2026); return x && (x.minutes || 0) >= 300 && rt && rt.v >= TD_PLAY && r.status !== 'incoming'; });
-    var inc = here.filter(function(r) { return r.status === 'incoming'; });
-    var pct = tot ? back / tot : 1;
-    var short = Math.max(0, need - proven.length);
-    var flag = (short > 0 && pct < 0.5) || short >= 2 ? 'red' : (short > 0 || pct < 0.65 ? 'amber' : 'green');
-    var word = flag === 'red' ? 'Need ' + Math.max(short, 1) : (flag === 'amber' ? (short ? 'Thin' : 'Watch') : 'Covered');
-    var best = proven.map(function(r) { return r.player_name.split(' ').slice(-1)[0] + ' ' + Math.round(tdRating(r, 2026).v); }).join(', ');
-    items.push({ flag: flag, html: '<div class="td-need"><div class="g">' + g + '</div><div class="bar"><i class="' + flag + '" style="width:' + Math.round(pct * 100) + '%"></i></div>' +
-      '<div class="flag ' + flag + '">' + word + '</div><div class="v">' + n[2] + ': ' + Math.round(pct * 100) + '% of minutes back · ' + proven.length + ' of ' + need + ' proven' +
-      (best ? ' (' + best + ')' : '') + (inc.length ? ' · incoming: ' + inc.map(function(r) { return r.player_name; }).join(', ') : '') + '</div></div>' });
+    var proven = here.filter(function(r) {
+      if (r.status === 'incoming') return false;
+      var rt = tdRating(r, TD_NEXT); if (!rt || rt.v < TD_PLAY) return false;
+      if (r.status === 'target') return true;
+      var x = tdStats[tdKey(r.unified_id, 2026)]; return (x && (x.minutes || 0) >= 300) || rt.basis === 'coach';
+    });
+    var targets = here.filter(function(r) { return r.status === 'target'; });
+    var pct = tot ? back / tot : 1, provenNoT = proven.filter(function(r) { return r.status !== 'target'; }).length;
+    var shortBase = Math.max(0, need - provenNoT);
+    var flag = (shortBase > 0 && pct < 0.5) || shortBase >= 2 ? 'red' : (shortBase > 0 || pct < 0.65 ? 'amber' : 'green');
+    var plan = tdNeeds[g];
+    out[g] = { g: g, need: need, label: n[2], pct: pct, proven: proven, here: here, targets: targets, flag: flag,
+               suggest: shortBase, add: plan ? plan.add_count : shortBase, saved: !!plan, confirmed: !!(plan && plan.confirmed) };
   });
-  items.sort(function(a, b) { return order[a.flag] - order[b.flag]; });
-  html += items.map(function(i) { return i.html; }).join('') + '</div>';
-  var inc = r27.filter(function(r) { return r.status === 'incoming'; });
+  return out;
+}
+
+// Where the dashed "+ options" cards go: the emptiest slots of a position that still has places to fill.
+function tdPlanGhosts(rows) {
+  tdGhosts = {};
+  var A = tdAnalyse();
+  Object.keys(A).forEach(function(g) {
+    var left = A[g].add - A[g].targets.length; if (left <= 0) return;
+    var slots = TD_GRP_SLOTS[g].slice().sort(function(a, b) {
+      return rows.filter(function(r) { return r.slot === a; }).length - rows.filter(function(r) { return r.slot === b; }).length;
+    });
+    for (var i = 0; i < left && i < slots.length; i++) tdGhosts[slots[i]] = 1;
+  });
+}
+
+// Who each newcomer has to beat: the weakest of the starters we need at that position in 2027.
+function tdBar(g, A) {
+  var rated = A[g].here.filter(function(r) { return r.status !== 'target' && r.status !== 'incoming'; })
+    .map(function(r) { var rt = tdRating(r, TD_NEXT); return rt ? { v: rt.v, n: r.player_name.split(' ').slice(-1)[0] } : null; })
+    .filter(Boolean).sort(function(a, b) { return b.v - a.v; });
+  return rated.length >= A[g].need ? rated[A[g].need - 1] : null;   // null = there is an open starting spot
+}
+
+function tdCands(g, A) {
+  var pencilled = {}; tdRows.forEach(function(r) { if (r.season === TD_NEXT && r.status === 'target') pencilled[r.unified_id] = r; });
+  var bar = tdBar(g, A), seen = {};
+  return paPool().filter(function(p) {
+    if (p._stub || p.team_id === HOME_TEAM_ID || seen[p.unified_id]) return false;
+    var gs = TD_POS_GRP[p.primary_pos] || []; if (gs.indexOf(g) < 0) return false;
+    seen[p.unified_id] = 1; return true;
+  }).map(function(p) {
+    var role = ssRole(p) || { k: 'unproven' }, fit = ssFitOf(p.unified_id), em = emailInterest[p.unified_id];
+    var adj = role.k !== 'unproven' && role.adj != null ? role.adj : null;
+    var base = adj != null ? adj : (p.composite_adj || 60) - 12;
+    var score = tdRank[g] === 'rating' ? base : base + (TD_FIT_PTS[fit] || 0) + (em ? 2 : 0) + ((interestByPlayer[p.unified_id] || {}).is_shortlisted ? 1 : 0);
+    var delta = adj != null && bar ? adj - bar.v : null;
+    return { p: p, role: role, adj: adj, fit: fit, email: em, grad: !!(tdPortal[p.unified_id] || {}).is_graduate,
+             score: score, delta: delta, bar: bar, pencil: pencilled[p.unified_id] };
+  }).sort(function(a, b) { return b.score - a.score; });
+}
+
+function tdCandHtml(c, g) {
+  var p = c.p, t = teamsById[p.team_id] || {}, Z = SS_ROLE[c.role.k];
+  var vs = c.adj == null ? '' : c.bar ? (c.delta >= 0 ? '+' : '') + c.delta.toFixed(1) + ' vs ' + c.bar.n : 'open starting spot';
+  var why = [];
+  if (c.fit && SS_SHORT[c.fit]) why.push(SS_SHORT[c.fit]);
+  if (c.email) why.push('emailed us');
+  if (c.grad) why.push('grad transfer');
+  var uid = p.unified_id.replace(/'/g, "\\'");
+  return '<div class="td-cand' + (c.pencil ? ' in' : '') + '">' +
+    '<div class="tc-main" onclick="openPlayerDetail(\'' + uid + '\',\'' + p.season + '\',' + p.team_id + ')">' +
+      '<div class="tc-name">' + (p._name || '') + (c.grad ? '<span class="td-tag grad">Grad</span>' : '') + (c.email ? ' <span title="Emailed us">✉</span>' : '') + '</div>' +
+      '<div class="tc-sub">' + (t.short_name || t.name || '') + ' · ' + paTier(p) + ' · ' + Math.round(p.minutes || 0).toLocaleString() + '′ · ' + p.primary_pos + '</div>' +
+      '<div class="tc-why"><span class="role-pill" style="color:' + Z.fg + ';background:' + Z.bg + '">' + Z.l + '</span>' + (vs ? ' <b>' + vs + '</b>' : '') + (why.length ? ' · ' + why.join(' · ') : '') + '</div>' +
+    '</div>' +
+    '<div class="tc-r">' + (c.adj != null ? c.adj.toFixed(1) : (p.composite_adj != null ? '<span style="color:#9ca3af">' + Math.round(p.composite_adj) + '</span>' : '—')) + '</div>' +
+    '<div class="tc-act"><button class="tc-sl' + ((interestByPlayer[p.unified_id] || {}).is_shortlisted ? ' on' : '') + '" title="Shortlist" onclick="toggleShortlist(\'' + uid + '\');setTimeout(renderDepth,50)">' + ((interestByPlayer[p.unified_id] || {}).is_shortlisted ? '★' : '☆') + '</button>' +
+      '<button class="tc-pin" onclick="' + (c.pencil ? 'tdUnpencil(\'' + uid + '\')' : 'tdPencil(\'' + uid + '\',\'' + g + '\')') + '">' + (c.pencil ? 'Pencilled ✓' : 'Pencil in') + '</button></div></div>';
+}
+
+function tdNeedsHtml() {
+  var A = tdAnalyse(), order = { red: 0, amber: 1, green: 2 };
+  var groups = TD_NEED.map(function(n) { return A[n[0]]; }).sort(function(a, b) {
+    return (b.add > 0) - (a.add > 0) || order[a.flag] - order[b.flag];
+  });
+  var total = groups.reduce(function(s, x) { return s + x.add; }, 0);
+  var allConfirmed = groups.every(function(x) { return x.confirmed; });
+  var who = groups.filter(function(x) { return x.confirmed && tdNeeds[x.g]; })[0];
+  var planTxt = groups.filter(function(x) { return x.add > 0; }).map(function(x) { return x.g + ' ' + x.add; }).join(' · ') || 'nobody';
+  var html = '<div class="td-panel td-plan"><h3>2027 plan</h3>' +
+    (tdNeedsMissing ? '<p class="hint" style="color:#b42318">Run <b>2026-11-27_team_needs_and_targets.sql</b> in the Recruiting DB to save the plan and pencil-ins.</p>' : '') +
+    '<div class="tp-sum"><div><b>Add ' + total + '</b>: ' + planTxt + '</div>' +
+    (allConfirmed && who ? '<div class="tp-ok">✓ Confirmed' + (who.updated_by ? ' by ' + String(who.updated_by).split('@')[0] : '') + (who.updated_at ? ', ' + new Date(who.updated_at).toLocaleDateString() : '') + '</div>'
+      : '<button class="tp-confirm" onclick="tdConfirmPlan()">Confirm plan</button>') + '</div>' +
+    '<p class="hint">The analysis suggests a number for each position (bar = share of 2026 minutes coming back; proven = 300+ minutes and rated ' + TD_PLAY + '+). Set your own with − and +, then confirm. Portal options are reads from ratings only: watch them play before you trust a number.</p>';
+  groups.forEach(function(x) {
+    var open = tdOpen[x.g] != null ? tdOpen[x.g] : x.add > 0;
+    var cands = open ? tdCands(x.g, A) : [];
+    var shown = cands.filter(function(c) { return c.adj != null || tdShowUnproven[x.g]; });
+    var lim = tdMore[x.g] ? 25 : 6;
+    var word = x.flag === 'red' ? 'Need' : x.flag === 'amber' ? (x.suggest ? 'Thin' : 'Watch') : 'Covered';
+    var best = x.proven.filter(function(r) { return r.status !== 'target'; }).map(function(r) { return r.player_name.split(' ').slice(-1)[0] + ' ' + Math.round(tdRating(r, TD_NEXT).v); }).join(', ');
+    html += '<div class="tp-g' + (x.add > 0 ? ' want' : '') + '">' +
+      '<div class="td-need"><div class="g">' + x.g + '</div><div class="bar"><i class="' + x.flag + '" style="width:' + Math.round(x.pct * 100) + '%"></i></div>' +
+      '<div class="flag ' + x.flag + '">' + word + '</div>' +
+      '<div class="v">' + x.label + ': ' + Math.round(x.pct * 100) + '% of minutes back · ' + x.proven.filter(function(r) { return r.status !== 'target'; }).length + ' of ' + x.need + ' proven' + (best ? ' (' + best + ')' : '') +
+        (x.here.some(function(r) { return r.status === 'incoming'; }) ? ' · incoming: ' + x.here.filter(function(r) { return r.status === 'incoming'; }).map(function(r) { return r.player_name; }).join(', ') : '') + '</div></div>' +
+      '<div class="tp-row"><span class="tp-lbl">Add</span>' +
+        '<button class="tp-step" onclick="tdSetNeed(\'' + x.g + '\',' + (x.add - 1) + ')"' + (x.add <= 0 ? ' disabled' : '') + '>−</button>' +
+        '<span class="tp-n">' + x.add + '</span>' +
+        '<button class="tp-step" onclick="tdSetNeed(\'' + x.g + '\',' + (x.add + 1) + ')">+</button>' +
+        '<span class="tp-sug">' + (x.add !== x.suggest ? 'analysis: ' + x.suggest : (x.saved ? '' : 'from the analysis')) + (x.targets.length ? ' · ' + x.targets.length + ' pencilled in' : '') + '</span>' +
+        '<button class="tp-open" onclick="tdOpen[\'' + x.g + '\']=' + (!open) + ';renderDepth()">' + (open ? 'Hide options' : 'Portal options') + '</button></div>';
+    if (open) {
+      html += '<div class="tp-rank">Rank by <button class="' + (tdRank[x.g] !== 'rating' ? 'on' : '') + '" onclick="tdRank[\'' + x.g + '\']=\'fit\';renderDepth()">Best fit for us</button><button class="' + (tdRank[x.g] === 'rating' ? 'on' : '') + '" onclick="tdRank[\'' + x.g + '\']=\'rating\';renderDepth()">Highest rated</button></div>' +
+        '<div class="tp-list">' + (shown.length ? shown.slice(0, lim).map(function(c) { return tdCandHtml(c, x.g); }).join('')
+          : '<p class="hint">No rated portal players at ' + x.g + ' right now.</p>') +
+        '<div class="tp-more">' + (shown.length > lim ? '<button onclick="tdMore[\'' + x.g + '\']=1;renderDepth()">Show ' + Math.min(shown.length, 25) + '</button>' : '') +
+        '<button onclick="tdShowUnproven[\'' + x.g + '\']=' + (!tdShowUnproven[x.g]) + ';renderDepth()">' + (tdShowUnproven[x.g] ? 'Hide' : 'Include') + ' unproven (' + cands.filter(function(c) { return c.adj == null; }).length + ')</button></div></div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  var inc = tdRowsFor(TD_NEXT).filter(function(r) { return r.status === 'incoming'; });
   html += '<div class="td-panel"><h3>Incoming</h3>' + (inc.length ? inc.map(function(r) {
     return '<div class="td-list-row"><span>' + r.player_name + '</span><span>' + TD_GROUP[r.slot || 'OUT'] + (r.note ? ' · ' + r.note.replace(/^Committed \(class of 2027, /, '').replace(/\)$/, '') : '') + '</span></div>'; }).join('')
     : '<p class="hint">None yet. Add transfers or signees with Edit.</p>') + '</div>';
   return html;
+}
+
+function tdOpenGroup(g) {
+  tdOpen[g] = true; renderDepth();
+  setTimeout(function() { var el = document.querySelector('.tp-g.want'); var all = document.querySelectorAll('.tp-g');
+    for (var i = 0; i < all.length; i++) if (all[i].querySelector('.g') && all[i].querySelector('.g').textContent === g) { all[i].scrollIntoView({ behavior: 'smooth', block: 'start' }); break; } }, 30);
+}
+
+function tdNeedSave(rows, done) {
+  if (tdNeedsMissing) { rows.forEach(function(r) { tdNeeds[r.pos_group] = r; }); done && done(); return; }
+  recruitSupa.from('team_needs').upsert(rows, { onConflict: 'school_id,season,pos_group' }).select().then(function(res) {
+    if (res.error) { alert('Could not save the plan: ' + res.error.message); return; }
+    (res.data || rows).forEach(function(r) { tdNeeds[r.pos_group] = r; }); done && done();
+  });
+}
+// Changing a number un-confirms the plan, so a confirmed plan always means someone signed off on these exact numbers.
+function tdSetNeed(g, n) {
+  n = Math.max(0, Math.min(9, n));
+  var rows = TD_NEED.map(function(x) {
+    var cur = tdNeeds[x[0]], A = null;
+    return { school_id: UNCW_SCHOOL_ID, season: TD_NEXT, pos_group: x[0], confirmed: false,
+             add_count: x[0] === g ? n : (cur ? cur.add_count : null) };
+  });
+  var A = tdAnalyse();
+  rows.forEach(function(r) { if (r.add_count == null) r.add_count = A[r.pos_group].add; });
+  tdNeedSave(rows, renderDepth);
+}
+function tdConfirmPlan() {
+  var A = tdAnalyse();
+  tdNeedSave(TD_NEED.map(function(x) { return { school_id: UNCW_SCHOOL_ID, season: TD_NEXT, pos_group: x[0], add_count: A[x[0]].add, confirmed: true }; }), renderDepth);
+}
+
+// Pencil a portal player into the 2027 depth chart: the emptiest slot of that position, ranked by her rating read.
+function tdPencil(uid, g) {
+  var p = ssCur(uid); if (!p) return;
+  var rows = tdRowsFor(TD_NEXT), role = ssRole(p), adj = role && role.adj != null ? role.adj : 0;
+  var slot = TD_GRP_SLOTS[g].slice().sort(function(a, b) {
+    return rows.filter(function(r) { return r.slot === a; }).length - rows.filter(function(r) { return r.slot === b; }).length;
+  })[0];
+  var depth = 1 + rows.filter(function(r) { if (r.slot !== slot) return false; var rt = tdRating(r, TD_NEXT); return rt && rt.v >= adj; }).length;
+  var t = teamsById[p.team_id] || {};
+  var row = { school_id: UNCW_SCHOOL_ID, season: TD_NEXT, player_key: uid, unified_id: uid, player_name: p._name, slot: slot, depth: depth,
+              status: 'target', note: 'Portal target from ' + (t.short_name || t.name || 'another school') };
+  recruitSupa.from('team_depth').upsert(row, { onConflict: 'school_id,season,player_key' }).then(function(res) {
+    if (res.error) { alert('Could not pencil her in: ' + res.error.message + (/check/i.test(res.error.message) ? '\n\nRun 2026-11-27_team_needs_and_targets.sql in the Recruiting DB first.' : '')); return; }
+    loadDepth();
+  });
+}
+function tdUnpencil(uid) {
+  recruitSupa.from('team_depth').delete().eq('school_id', UNCW_SCHOOL_ID).eq('season', TD_NEXT).eq('player_key', uid).eq('status', 'target')
+    .then(function(res) { if (res.error) { alert('Could not remove: ' + res.error.message); return; } loadDepth(); });
 }
 
 function tdToggleEdit() { tdEditing = !tdEditing; renderDepth(); }
@@ -3001,6 +3223,7 @@ function tdClick(encKey, season) {
   if (tdEditing) { tdEdit(key, season); return; }
   var p = tdFind(key, season);
   if (!p || !p.unified_id) return;
+  if (p.status === 'target') { var tc = ssCur(p.unified_id); if (tc) openPlayerDetail(p.unified_id, tc.season, tc.team_id); return; }
   var s = Math.min(tdSeason, 2026);
   var have = tdRate[tdKey(p.unified_id, s)] ? s : (tdRate[tdKey(p.unified_id, 2026)] ? 2026 : null);
   if (have) openPlayerDetail(p.unified_id, 'FA' + have, 2403);

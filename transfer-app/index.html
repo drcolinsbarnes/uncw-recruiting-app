@@ -666,6 +666,24 @@ body.desk .td-side { width:400px; max-width:400px; }
 .sl-tog { margin-left:10px; display:inline-flex; gap:3px; }
 .sl-tog button { border:1px solid var(--border); background:#fff; border-radius:12px; padding:1px 8px; font-size:11px; cursor:pointer; }
 .sl-tog button.on { background:var(--navy); color:#fff; border-color:var(--navy); }
+
+/* Players results strip (Nov 27): count + Totals/Per 90 + position chips */
+#playersResultsBar { padding:8px 12px; background:#fff; border-bottom:1px solid var(--border); color:var(--text); }
+body.desk #screenPlayers #playersResultsBar { padding:10px 20px; }
+.pl-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.pl-count { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; margin-right:auto; }
+.pl-count b { font-size:22px; font-weight:800; color:var(--navy); line-height:1; font-variant-numeric:tabular-nums; }
+.pl-cl { font-size:13px; font-weight:700; color:var(--teal); }
+.pl-sub { font-size:11.5px; color:var(--muted); }
+.pl-seg { display:inline-flex; background:#eef1f5; border-radius:9px; padding:3px; }
+.pl-seg button { border:0; background:transparent; padding:5px 12px; font-size:12px; font-weight:700; color:var(--muted); border-radius:7px; cursor:pointer; }
+.pl-seg button.on { background:var(--navy); color:#fff; }
+.pl-pos { display:inline-flex; gap:4px; flex-wrap:wrap; }
+.pl-pos button { border:1.5px solid #cfe9e7; background:#fff; color:#00706b; padding:4px 10px; font-size:12px; font-weight:700; border-radius:16px; cursor:pointer; }
+.pl-pos button:hover { border-color:var(--teal); }
+.pl-pos button.on { background:var(--teal); border-color:var(--teal); color:#fff; }
+body.desk .ptable th.col-name, body.desk .ptable td.col-name { min-width: 320px; }
+.ptable th[title] { cursor:help; }
 </style>
 </head>
 <body>
@@ -686,7 +704,7 @@ body.desk .td-side { width:400px; max-width:400px; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.9</div>
+        <div class="sub">Women's Soccer · v5.0</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2564,12 +2582,107 @@ function filteredPlayers() {
   });
 }
 
+
+// ══ Players table stats (Colin, Nov 27, 2026) ══════════════════════════════════════════════════
+// Only stats we have for EVERY season and every D1 match: the box scores. The stats-provider badge
+// stats (passing, duels, crosses) exist for two seasons of conference play only and were blank for
+// every current-season row, so they are gone from the table (still on the player card for those seasons).
+// Toggles at the top: Totals (default) or Per 90, and a position, which swaps in the columns that matter
+// for it. A column only appears if someone in the current view has a value in it — never a column of dashes.
+// Per-90 numbers need 300+ minutes (same rule as the Portal analysis scatter).
+var plView = 'tot', plBox = {}, plBoxLoading = {}, plBoxExtras = true;
+var PL_BOX_BASE = 'unified_id,team_id,shots,sog,gk_minutes,saves,goals_against';
+var PL_BOX_EXTRA = ',g60,cs,ga60,gs_res,pts_gs,gk_cs';
+function plLoadBox(season) {
+  if (!careerSupa || plBox[season] || plBoxLoading[season]) return;
+  plBoxLoading[season] = true;
+  var acc = {};
+  (function page(off) {
+    careerSupa.from('boxscore_season_stats').select(PL_BOX_BASE + (plBoxExtras ? PL_BOX_EXTRA : '')).eq('season', season)
+      .order('id').range(off, off + 999).then(function(r) {
+        if (r.error) {
+          if (plBoxExtras && /column/i.test(r.error.message || '')) { plBoxExtras = false; page(off); return; }   // extras not added yet: base columns only
+          console.warn('box stats', r.error.message); plBoxLoading[season] = false; return;
+        }
+        (r.data || []).forEach(function(x) { acc[x.unified_id + '|' + x.team_id] = x; });
+        if ((r.data || []).length === 1000) { page(off + 1000); return; }
+        plBox[season] = acc; plBoxLoading[season] = false;
+        if (document.getElementById('screenPlayers').classList.contains('active')) renderPlayers();
+      });
+  })(0);
+}
+function plB(p) { return (plBox[p.season] || {})[p.unified_id + '|' + p.team_id] || null; }
+var PL_MIN90 = 300;
+function plPer(n, m) { return n == null || !m || m < PL_MIN90 ? null : n / m * 90; }
+// id -> header, hover text, value function, format ('n' count, 'd' 2 decimals, 'p' percent), low = lower is better
+var PL_STAT = {
+  gp:   { t: 'GP',   tip: 'Games played',                                  f: function(p) { return p.matches_played; }, fm: 'n' },
+  gs:   { t: 'GS',   tip: 'Games started',                                 f: function(p) { return p.matches_started; }, fm: 'n' },
+  min:  { t: 'Min',  tip: 'Minutes played',                                f: function(p) { return p.minutes; }, fm: 'n' },
+  g:    { t: 'G',    tip: 'Goals',                                         f: function(p) { return p.goals; }, fm: 'n' },
+  a:    { t: 'A',    tip: 'Assists',                                       f: function(p) { return p.assists; }, fm: 'n' },
+  gac:  { t: 'G+A',  tip: 'Goals plus assists',                            f: function(p) { return p.goals == null && p.assists == null ? null : (p.goals || 0) + (p.assists || 0); }, fm: 'n' },
+  g90:  { t: 'G/90', tip: 'Goals per 90 minutes (300+ minutes)',           f: function(p) { return plPer(p.goals, p.minutes); }, fm: 'd' },
+  a90:  { t: 'A/90', tip: 'Assists per 90 minutes (300+ minutes)',         f: function(p) { return plPer(p.assists, p.minutes); }, fm: 'd' },
+  ga90: { t: 'G+A/90', tip: 'Goals plus assists per 90 minutes (300+ minutes)', f: function(p) { return plPer((p.goals || 0) + (p.assists || 0), p.minutes); }, fm: 'd' },
+  sh:   { t: 'Sh',   tip: 'Shots',                                         f: function(p, b) { return b ? b.shots : null; }, fm: 'n' },
+  sog:  { t: 'SOG',  tip: 'Shots on goal',                                 f: function(p, b) { return b ? b.sog : null; }, fm: 'n' },
+  sh90: { t: 'Sh/90', tip: 'Shots per 90 minutes (300+ minutes)',          f: function(p, b) { return b ? plPer(b.shots, p.minutes) : null; }, fm: 'd' },
+  sog90:{ t: 'SOG/90', tip: 'Shots on goal per 90 minutes (300+ minutes)', f: function(p, b) { return b ? plPer(b.sog, p.minutes) : null; }, fm: 'd' },
+  sot:  { t: 'SOT%', tip: 'Shots on target: shots on goal ÷ shots (5+ shots)', f: function(p, b) { return b && b.shots >= 5 ? b.sog / b.shots * 100 : null; }, fm: 'p' },
+  conv: { t: 'Conv%', tip: 'Conversion: goals ÷ shots (5+ shots)',         f: function(p, b) { return b && b.shots >= 5 ? (p.goals || 0) / b.shots * 100 : null; }, fm: 'p' },
+  cs:   { t: 'CS',   tip: 'Clean sheets: games she played 60+ minutes in which her team conceded none', f: function(p, b) { return b && b.cs != null ? b.cs : null; }, fm: 'n' },
+  cs90: { t: 'CS/90', tip: 'Clean sheets per 90 minutes (300+ minutes)',   f: function(p, b) { return b && b.cs != null ? plPer(b.cs, p.minutes) : null; }, fm: 'd' },
+  csr:  { t: 'CS%',  tip: 'Clean-sheet rate: share of her 60+ minute games with a clean sheet (3+ games)', f: function(p, b) { return b && b.g60 >= 3 ? b.cs / b.g60 * 100 : null; }, fm: 'p' },
+  gapg: { t: 'GA/gm', tip: 'Team goals conceded per game in her 60+ minute games (3+ games). Lower is better.', f: function(p, b) { return b && b.g60 >= 3 ? b.ga60 / b.g60 : null; }, fm: 'd', low: 1 },
+  ppg:  { t: 'PPG',  tip: 'Team points per game in her starts: 3 for a win, 1 for a draw (3+ starts)', f: function(p, b) { return b && b.gs_res >= 3 ? b.pts_gs / b.gs_res : null; }, fm: 'd' },
+  sv:   { t: 'Sv',   tip: 'Saves',                                         f: function(p, b) { return b && b.gk_minutes ? b.saves : null; }, fm: 'n' },
+  sv90: { t: 'Sv/90', tip: 'Saves per 90 keeper minutes (300+)',          f: function(p, b) { return b && b.gk_minutes ? plPer(b.saves, b.gk_minutes) : null; }, fm: 'd' },
+  svp:  { t: 'Sv%',  tip: 'Save percentage: saves ÷ (saves + goals against), 10+ shots faced', f: function(p, b) { return b && b.gk_minutes && (b.saves + b.goals_against) >= 10 ? b.saves / (b.saves + b.goals_against) * 100 : null; }, fm: 'p' },
+  gaa:  { t: 'GAA',  tip: 'Goals against per 90 keeper minutes (300+). Lower is better.', f: function(p, b) { return b && b.gk_minutes >= PL_MIN90 ? b.goals_against * 90 / b.gk_minutes : null; }, fm: 'd', low: 1 },
+  gkcs: { t: 'CS',   tip: 'Keeper clean sheets: 60+ minutes in goal, no goals against', f: function(p, b) { return b && b.gk_minutes && b.gk_cs != null ? b.gk_cs : null; }, fm: 'n' },
+  gkcs90:{ t: 'CS/90', tip: 'Keeper clean sheets per 90 keeper minutes (300+)', f: function(p, b) { return b && b.gk_minutes && b.gk_cs != null ? plPer(b.gk_cs, b.gk_minutes) : null; }, fm: 'd' }
+};
+var PL_GRP = { '': 'ALL', GK: 'GK', CB: 'CB', OB: 'OB', DM: 'DM', CM: 'DM', AM: 'AM', WF: 'F', CF: 'F', 'N/A': 'NA' };
+var PL_SET = {
+  ALL: { tot: ['gp','gs','min','g','a','gac','sh','cs'],          p90: ['gp','gs','min','g90','a90','ga90','sh90','cs90'] },
+  F:   { tot: ['gp','gs','min','g','a','gac','sh','sog','g90','ga90'], p90: ['gp','gs','min','g90','a90','ga90','sh90','sog90','sot','conv'] },
+  AM:  { tot: ['gp','gs','min','g','a','gac','ga90','sh','sog','ppg'], p90: ['gp','gs','min','g90','a90','ga90','sh90','sog90','ppg'] },
+  DM:  { tot: ['gp','gs','min','g','a','gac','cs','gapg','ppg'],  p90: ['gp','gs','min','g90','a90','ga90','cs90','gapg','ppg'] },
+  CB:  { tot: ['gp','gs','min','g','a','gac','cs','csr','gapg'],  p90: ['gp','gs','min','g90','a90','ga90','cs90','csr','gapg'] },
+  OB:  { tot: ['gp','gs','min','g','a','gac','cs','gapg'],        p90: ['gp','gs','min','g90','a90','ga90','cs90','gapg'] },
+  GK:  { tot: ['gp','gs','min','sv','svp','gaa','gkcs'],          p90: ['gp','gs','min','sv90','svp','gaa','gkcs90'] },
+  NA:  { tot: ['gp','gs','min','g','a','gac'],                    p90: ['gp','gs','min','g90','a90','ga90'] }
+};
+var PL_TIP = { name: 'Player, school and conference. Tags: PORTAL = in the portal now; XFER = has transferred before; ✉ = emailed us; fit = sweet-spot read for us.',
+  school: 'School', conf: 'Conference', tier: 'Conference tier: P4, High Major, Mid Major, Low Major',
+  composite_adj: 'Our rating (0-100), adjusted for level. A read from box scores and level — watch her play to judge it.' };
+function plFmt(v, fm) {
+  if (v == null || isNaN(v)) return null;
+  return fm === 'n' ? String(Math.round(v)) : fm === 'p' ? Math.round(v) + '%' : v.toFixed(2);
+}
+function plSetPos(v) { document.getElementById('fPos').value = v; renderPlayers(); }
+function plSetView(v) { plView = v; if (sortKey.indexOf('x:') === 0) { sortKey = 'composite_adj'; sortDir = -1; } renderPlayers(); }
+function plBarHtml(n, rated, est, pos, note, capped) {
+  var chips = [['', 'All'], ['GK','GK'], ['CB','CB'], ['OB','OB'], ['DM','DM'], ['AM','AM'], ['WF','WF'], ['CF','CF']];
+  return '<div class="pl-bar">' +
+    '<div class="pl-count"><b>' + n.toLocaleString() + '</b><span class="pl-cl">players</span>' +
+      '<span class="pl-sub">' + rated + ' rated' + (est ? ' · ' + est + ' estimated' : '') + (note || '') + (capped ? ' · showing top ' + capped : '') + '</span></div>' +
+    '<div class="pl-seg" role="group" aria-label="Stat view">' +
+      '<button class="' + (plView === 'tot' ? 'on' : '') + '" onclick="plSetView(\'tot\')">Totals</button>' +
+      '<button class="' + (plView === 'p90' ? 'on' : '') + '" onclick="plSetView(\'p90\')">Per 90</button></div>' +
+    '<div class="pl-pos" role="group" aria-label="Position">' + chips.map(function(c) {
+      return '<button class="' + (pos === c[0] ? 'on' : '') + '" onclick="plSetPos(\'' + c[0] + '\')">' + c[1] + '</button>'; }).join('') + '</div>' +
+  '</div>';
+}
+
 function sortValue(p, key) {
   if (key === 'name')   return p._name || '';
   if (key === 'school') return (teamsById[p.team_id] || {}).short_name || (teamsById[p.team_id] || {}).name || '';
   if (key === 'conf')   return (teamsById[p.team_id] || {}).conference_short || (teamsById[p.team_id] || {}).conference || '';
   if (key === 'tier')   return { 'P4': 'a', 'High Major': 'b', 'Mid Major': 'c', 'Low Major': 'd' }[(teamsById[p.team_id] || {}).tier] || 'z';
   if (key === 'ss_role') { var _r = ssRole(p); return _r ? SS_ROLE[_r.k].o : null; }
+  if (key.indexOf('x:') === 0) { var _d = PL_STAT[key.slice(2)]; var _v = _d ? _d.f(p, plB(p)) : null; return _v == null || isNaN(_v) ? null : _v; }
   if (key.indexOf('badge:') === 0) {
     var b = p.badge_stats && p.badge_stats[key.slice(6)];
     return b ? b.v : null;
@@ -2579,7 +2692,7 @@ function sortValue(p, key) {
 
 function setSort(key) {
   if (sortKey === key) { sortDir = -sortDir; }
-  else { sortKey = key; sortDir = (key === 'name' || key === 'school') ? 1 : -1; }
+  else { sortKey = key; sortDir = (key === 'name' || key === 'school' || (key.indexOf('x:') === 0 && PL_STAT[key.slice(2)] && PL_STAT[key.slice(2)].low)) ? 1 : -1; }
   renderPlayers();
 }
 
@@ -2600,11 +2713,8 @@ function renderPlayers() {
   var rated  = rows.filter(function(r) { return r.rating_basis === 'stats'; }).length;
   var est    = rows.filter(function(r) { return r.rating_basis === 'bench (floor only)'; }).length;
   var season = document.getElementById('fSeason').value;
-  document.getElementById('playersResultsBar').textContent =
-    rows.length + ' players · ' + rated + ' rated' +
-    (est ? ' · ' + est + ' est (bench)' : '') +
-    (pos ? ' · ' + pos + ' stats' : '') +
-    (season !== CURRENT_SEASON ? ' · ' + season.replace('FA', '') + ' season, ' + CURRENT_SEASON.replace('FA', '') + ' players' : '');
+  plLoadBox(season);
+  var _note = season !== CURRENT_SEASON ? ' · ' + season.replace('FA', '') + ' season' : '';
 
   // Generic columns, or the position's badge stats when a position is selected.
   // Ranks (national/conference/team) are deliberately NOT columns here — Colin,
@@ -2614,13 +2724,10 @@ function renderPlayers() {
   // then only the counting stats. Colin, Aug 1, 2026: the school column was the
   // widest and least interesting, the raw rating isn't needed on the list, and
   // everything must fit a phone without sideways scrolling.
+  var grp = PL_GRP[pos] || 'ALL', set = PL_SET[grp][plView];
   var cols = [
     { k: 'name',            t: 'Player',  cls: 'col-name' },
-    { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
-    { k: 'matches_played',  t: 'GP'     },
-    { k: 'minutes',         t: 'Min'    },
-    { k: 'goals',           t: 'G'      },
-    { k: 'assists',         t: 'A'       }
+    { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' }
   ];
   if (isDesk()) {
     // Desktop: school, conference and tier get their own columns, plus the UNCW / P4 projections and starts.
@@ -2629,23 +2736,24 @@ function renderPlayers() {
       { k: 'school',          t: 'School',  cls: 'txt' },
       { k: 'conf',            t: 'Conf',    cls: 'txt opt' },
       { k: 'tier',            t: 'Tier',    cls: 'txt opt' },
-      { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' },
-      { k: 'ss_role',         t: 'At UNCW', cls: 'txt' },
-      { k: 'matches_played',  t: 'GP'     },
-      { k: 'matches_started', t: 'GS',     cls: 'opt' },
-      { k: 'minutes',         t: 'Min'    },
-      { k: 'goals',           t: 'G'      },
-      { k: 'assists',         t: 'A'      }
-    ];
+      { k: 'composite_adj',   t: 'Rating',  cls: 'col-rating' }
+    ];   // 'At UNCW' column removed Nov 27 (Colin): the coach decides fit; the read stays on the player card
     // 'Type' column removed (Nov 26): player types exist only for FA2025 Wyscout rows, so it was empty for the current season
   }
-  if (pos) {
-    badgeColsFor(pos).forEach(function(c) { cols.push({ k: 'badge:' + c[0], t: c[1] }); });
-  }
+  // Stat columns for this view. On a phone: minutes plus the first three that carry the position's story.
+  var statIds = isDesk() ? set : ['min'].concat(set.filter(function(id) { return id !== 'gp' && id !== 'gs' && id !== 'min'; }).slice(-3));
+  var shownRows = rows.slice(0, 400);
+  statIds.forEach(function(id) {
+    var d = PL_STAT[id];
+    var any = shownRows.some(function(p) { var v = d.f(p, plB(p)); return v != null && !isNaN(v); });
+    if (any) cols.push({ k: 'x:' + id, t: d.t, tip: d.tip, fm: d.fm, cls: id === 'min' ? 'mins' : '' });
+  });
+  if (sortKey.indexOf('badge:') === 0 || sortKey === 'ss_role') { sortKey = 'composite_adj'; sortDir = -1; }
 
   document.getElementById('playersHead').innerHTML = '<tr>' + cols.map(function(c) {
     var on = sortKey === c.k;
-    return '<th class="' + (c.cls || '') + (on ? ' sorted' : '') + '" onclick="setSort(\'' + c.k + '\')">' +
+    var tip = c.tip || PL_TIP[c.k] || '';
+    return '<th class="' + (c.cls || '') + (on ? ' sorted' : '') + '" onclick="setSort(\'' + c.k + '\')"' + (tip ? ' title="' + tip.replace(/"/g, '&quot;') + '"' : '') + '>' +
       c.t + (on ? '<span class="arrow">' + (sortDir < 0 ? '▼' : '▲') + '</span>' : '') + '</th>';
   }).join('') + '</tr>';
 
@@ -2693,10 +2801,10 @@ function renderPlayers() {
       if (c.k === 'rank_nat')  return rankCell(p.rank_nat,  p.n_nat);
       if (c.k === 'rank_conf') return rankCell(p.rank_conf, p.n_conf);
       if (c.k === 'rank_team') return rankCell(p.rank_team, p.n_team);
-      if (c.k.indexOf('badge:') === 0) {
-        var b = p.badge_stats && p.badge_stats[c.k.slice(6)];
-        if (!b || b.v == null) return '<td class="unrated">—</td>';
-        return '<td>' + b.v.toFixed(2) + (b.nat != null ? '<div class="sub">' + Math.round(b.nat) + 'th</div>' : '') + '</td>';
+      if (c.k.indexOf('x:') === 0) {
+        var _txt = plFmt(PL_STAT[c.k.slice(2)].f(p, plB(p)), c.fm);
+        if (_txt == null) return '<td class="unrated' + (c.cls ? ' ' + c.cls : '') + '"' + (c.fm !== 'n' ? ' title="Not enough minutes or games to say"' : '') + '>·</td>';
+        return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + _txt + '</td>';
       }
       var v = p[c.k];
       if (c.k === 'minutes') {
@@ -2711,9 +2819,7 @@ function renderPlayers() {
   document.getElementById('playersBody').innerHTML = body ||
     '<tr><td colspan="' + cols.length + '" style="text-align:center;padding:20px;color:var(--muted)">No players match these filters.</td></tr>';
 
-  if (rows.length > MAX) {
-    document.getElementById('playersResultsBar').textContent += ' · showing top ' + MAX;
-  }
+  document.getElementById('playersResultsBar').innerHTML = plBarHtml(rows.length, rated, est, pos, _note, rows.length > MAX ? MAX : 0);
 }
 
 function rankCell(rank, n) {

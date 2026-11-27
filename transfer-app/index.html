@@ -634,7 +634,7 @@ body.desk .td-pitch { flex:1; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.5</div>
+        <div class="sub">Women's Soccer · v4.6</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2837,7 +2837,10 @@ function tdRowsFor(season) {
   var byKey = {}; own.forEach(function(r) { byKey[r.player_key] = r; });
   var carried = tdRows.filter(function(r) { return r.season === 2026 && !byKey[r.player_key] && !tdLeaves(r, 2026); })
     .map(function(r) { var c = Object.assign({}, r); c._from2026 = true; return c; });
-  return carried.concat(own.filter(function(r) { return !tdLeaves(r, TD_NEXT); }));
+  // A 2027 row is still on the 2027 team unless she left after 2026. Testing against 2027
+  // itself dropped anyone whose LAST season is 2027 (grad year 2028) as soon as a coach
+  // edited her on this tab — that is how Reagan Hamilton vanished (Nov 26).
+  return carried.concat(own.filter(function(r) { return !tdLeaves(r, TD_NEXT - 1); }));
 }
 
 function tdSorted(list, season) {

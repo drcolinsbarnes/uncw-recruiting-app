@@ -508,7 +508,8 @@ body.desk .ss-mt { font-size:11px; }
 
 
 /* ══ TEAM TAB — depth chart on a pitch (Nov 27, 2026). 4-3-3, attacking up the page. ══ */
-#screenTeam { background: #eef2f0; }
+#screenTeam { background: #eef2f0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#screenTeam > * { flex-shrink: 0; }   /* the pitch is taller than the screen: scroll the tab, never squash it */
 .td-top { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#fff; border-bottom:1px solid var(--border); flex-wrap:wrap; position:sticky; top:0; z-index:3; }
 .td-seasons { display:flex; background:#eef1f5; border-radius:9px; padding:3px; gap:2px; }
 .td-seasons button { border:0; background:transparent; padding:6px 12px; font-size:13px; font-weight:600; color:var(--muted); border-radius:7px; cursor:pointer; }
@@ -632,7 +633,7 @@ body.desk .td-pitch { flex:1; }
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v4.3</div>
+        <div class="sub">Women's Soccer · v4.4</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>

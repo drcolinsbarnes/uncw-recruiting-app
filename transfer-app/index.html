@@ -684,6 +684,13 @@ body.desk #screenPlayers #playersResultsBar { padding:10px 20px; }
 .pl-pos button.on { background:var(--teal); border-color:var(--teal); color:#fff; }
 body.desk .ptable th.col-name, body.desk .ptable td.col-name { min-width: 320px; }
 .ptable th[title] { cursor:help; }
+
+.pl-parts { display:inline-flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#374151; }
+.pl-parts span { cursor:help; white-space:nowrap; }
+.pl-count .pl-parts b { font-size:13px; font-weight:800; color:var(--navy); margin-right:2px; line-height:1.2; }
+.pl-parts { margin-left:8px; }
+.pl-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:0; }
+.pl-dot.r { background:var(--teal); } .pl-dot.e { background:#f0c040; } .pl-dot.n { background:#cbd5e1; }
 </style>
 </head>
 <body>
@@ -704,7 +711,7 @@ body.desk .ptable th.col-name, body.desk .ptable td.col-name { min-width: 320px;
     <div class="app-header">
       <div>
         <h1>UNCW Transfer Portal</h1>
-        <div class="sub">Women's Soccer · v5.0</div>
+        <div class="sub">Women's Soccer · v5.1</div>
       </div>
       <button class="switch-btn" onclick="switchToRecruitingApp()">↔ Recruiting App</button>
     </div>
@@ -2667,7 +2674,13 @@ function plBarHtml(n, rated, est, pos, note, capped) {
   var chips = [['', 'All'], ['GK','GK'], ['CB','CB'], ['OB','OB'], ['DM','DM'], ['AM','AM'], ['WF','WF'], ['CF','CF']];
   return '<div class="pl-bar">' +
     '<div class="pl-count"><b>' + n.toLocaleString() + '</b><span class="pl-cl">players</span>' +
-      '<span class="pl-sub">' + rated + ' rated' + (est ? ' · ' + est + ' estimated' : '') + (note || '') + (capped ? ' · showing top ' + capped : '') + '</span></div>' +
+      // Three parts that always add up to the total (Colin, Nov 27): rated on her own play, an estimate from
+      // limited minutes (mostly her programme), and no rating at all.
+      '<span class="pl-parts">' +
+        '<span title="Enough minutes to be rated on her own box-score play"><i class="pl-dot r"></i><b>' + rated + '</b> rated on their play</span>' +
+        '<span title="Too few minutes to judge her own play: the rating is mostly her programme\'s strength and how much she played"><i class="pl-dot e"></i><b>' + est + '</b> limited-minutes estimates</span>' +
+        '<span title="No rating: no minutes or no stats on file"><i class="pl-dot n"></i><b>' + Math.max(0, n - rated - est) + '</b> no rating</span>' +
+      '</span><span class="pl-sub">' + (note ? note.replace(/^ · /, '') : '') + (capped ? (note ? ' · ' : '') + 'showing top ' + capped : '') + '</span></div>' +
     '<div class="pl-seg" role="group" aria-label="Stat view">' +
       '<button class="' + (plView === 'tot' ? 'on' : '') + '" onclick="plSetView(\'tot\')">Totals</button>' +
       '<button class="' + (plView === 'p90' ? 'on' : '') + '" onclick="plSetView(\'p90\')">Per 90</button></div>' +
@@ -2710,8 +2723,9 @@ function renderPlayers() {
     return (x - y) * sortDir;
   });
 
-  var rated  = rows.filter(function(r) { return r.rating_basis === 'stats'; }).length;
-  var est    = rows.filter(function(r) { return r.rating_basis === 'bench (floor only)'; }).length;
+  // rated = has a rating that is not a limited-minutes estimate (own stats, or blended with her last full season)
+  var est    = rows.filter(function(r) { return r.composite_adj != null && r.rating_basis === 'bench (floor only)'; }).length;
+  var rated  = rows.filter(function(r) { return r.composite_adj != null && r.rating_basis !== 'bench (floor only)'; }).length;
   var season = document.getElementById('fSeason').value;
   plLoadBox(season);
   var _note = season !== CURRENT_SEASON ? ' · ' + season.replace('FA', '') + ' season' : '';
